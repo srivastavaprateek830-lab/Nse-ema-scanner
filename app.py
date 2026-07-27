@@ -106,6 +106,29 @@ if not results_df.empty:
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean().dropna().sort_values(by="Change", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
+    # --- 🎯 NEW TOP CONPLAY CONDENSED PANELS SECTION ---
+    st.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
+    
+    # Selection mapping: Fixed the .iloc item text formatting string extract rule
+    sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
+    active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"]) if sel_rows else "ACC"
+
+    with st.spinner(f"Updating trend for {active_ticker}..."): 
+        st_matrix_df = get_supertrend_row(active_ticker)
+        
+    def style_cells(v):
+        if 'BULLISH' in str(v): return 'background-color: rgba(41, 181, 232, 0.2); color: #29b5e8; font-weight: bold;'
+        if 'BEARISH' in str(v): return 'background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;'
+        return ''
+        
+    if not st_matrix_df.empty:
+        st.dataframe(st_matrix_df.style.map(style_cells, subset=['Weekly', 'Daily', 'Hourly', '15 Min']), use_container_width=True, hide_index=True)
+    else:
+        st.info("No trend data loaded.")
+        
+    st.markdown("---")
+
+    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
     col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
     col_master.subheader("🔍 Complete F&O Watchlist")
@@ -122,6 +145,7 @@ if not results_df.empty:
         col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
     else:
         col_sell.info("No stocks pumped.")
+
     col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)
     for _, row in sector_summary.iterrows():
         color = "#29b5e8" if row["Change"] >= 0 else "#ff4b4b"

@@ -1,36 +1,32 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import requests
-
-# Fix for Yahoo Finance cache location on Streamlit servers
-yf.set_tz_cache_location("/tmp/yf_cache")
 
 # Set up page configuration for an expansive 4-column layout
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
 st.title("📈 NSE F&O EMA20 Deviation Scanner")
 st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
 
-# List of 100+ prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
+# List of prominent NSE F&O Tickers
 FO_TICKERS = [
-    "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
-    "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
-    "BANKBARODA.NS", "BEL.NS", "BHARATFORG.NS", "BHARTIARTL.NS", "BHEL.NS", "BPCL.NS", 
-    "BRITANNIA.NS", "CANBK.NS", "CIPLA.NS", "COALINDIA.NS", "COFORGE.NS", "CONCOR.NS", 
-    "DABUR.NS", "DIVISLAB.NS", "DIXON.NS", "DLF.NS", "DRREDDY.NS", "EICHERMOT.NS", 
-    "GAIL.NS", "GLENMARK.NS", "GODREJCP.NS", "GODREJPROP.NS", "GRASIM.NS", "HAL.NS", 
-    "HAVELLS.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", 
-    "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ICICIGI.NS", "IDEA.NS", "IGL.NS", 
-    "INDHOTEL.NS", "INDIGO.NS", "INDUSINDBK.NS", "INDUSTOWER.NS", "INFY.NS", "IOC.NS", 
-    "IRCTC.NS", "ITC.NS", "JINDALSTEL.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS", 
-    "LTIM.NS", "LUPIN.NS", "M&M.NS", "MARICO.NS", "MARUTI.NS", "MCX.NS", "MUTHOOTFIN.NS", 
-    "NATIONALUM.NS", "NAUKRI.NS", "NESTLEIND.NS", "NMDC.NS", "NTPC.NS", "ONGC.NS", 
-    "PERSISTENT.NS", "PFC.NS", "PIDILITIND.NS", "PNB.NS", "POLYCAB.NS", "POWERGRID.NS", 
-    "REC.NS", "RELIANCE.NS", "SAIL.NS", "SBICARD.NS", "SBILIFE.NS", "SBIN.NS", 
-    "SHRIRAMFIN.NS", "SIEMENS.NS", "SRF.NS", "SUNPHARMA.NS", "TATACHEMICAL.NS", 
-    "TATACOMM.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATAPOWER.NS", "TATASTEEL.NS", 
-    "TCS.NS", "TECHM.NS", "TITAN.NS", "TORNTPHARM.NS", "TRENT.NS", "TVSMOTOR.NS", 
-    "ULTRACEMCO.NS", "UPL.NS", "VEDL.NS", "VOLTAS.NS", "WIPRO.NS", "ZEEL.NS"
+    "ACC", "AARTIIND", "ABB", "ADANIENT", "ADANIPORTS", "APOLLOHOSP", 
+    "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO", "BAJFINANCE", "BAJAJFINSV", 
+    "BANKBARODA", "BEL", "BHARATFORG", "BHARTIARTL", "BHEL", "BPCL", 
+    "BRITANNIA", "CANBK", "CIPLA", "COALINDIA", "COFORGE", "CONCOR", 
+    "DABUR", "DIVISLAB", "DIXON", "DLF", "DRREDDY", "EICHERMOT", 
+    "GAIL", "GLENMARK", "GODREJCP", "GODREJPROP", "GRASIM", "HAL", 
+    "HAVELLS", "HCLTECH", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO", 
+    "HINDALCO", "HINDUNILVR", "ICICIBANK", "ICICIGI", "IDEA", "IGL", 
+    "INDHOTEL", "INDIGO", "INDUSINDBK", "INDUSTOWER", "INFY", "IOC", 
+    "IRCTC", "ITC", "JINDALSTEL", "JSWSTEEL", "KOTAKBANK", "LT", 
+    "LTIM", "LUPIN", "M&M", "MARICO", "MARUTI", "MCX", "MUTHOOTFIN", 
+    "NATIONALUM", "NAUKRI", "NESTLEIND", "NMDC", "NTPC", "ONGC", 
+    "PERSISTENT", "PFC", "PIDILITIND", "PNB", "POLYCAB", "POWERGRID", 
+    "REC", "RELIANCE", "SAIL", "SBICARD", "SBILIFE", "SBIN", 
+    "SHRIRAMFIN", "SIEMENS", "SRF", "SUNPHARMA", "TATACHEMICAL", 
+    "TATACOMM", "TATACONSUM", "TATAMOTORS", "TATAPOWER", "TATASTEEL", 
+    "TCS", "TECHM", "TITAN", "TORNTPHARM", "TRENT", "TVSMOTOR", 
+    "ULTRACEMCO", "UPL", "VEDL", "VOLTAS", "WIPRO", "ZEEL"
 ]
 
 # Sector Mapping Lookup table to calculate performance values natively
@@ -45,81 +41,93 @@ TICKER_SECTORS = {
     "ADANIPORTS": "⚡ ENERGY", "BPCL": "⚡ ENERGY", "COALINDIA": "⚡ ENERGY", "GAIL": "⚡ ENERGY", "HINDPETRO": "⚡ ENERGY", "IOC": "⚡ ENERGY", "NTPC": "⚡ ENERGY", "ONGC": "⚡ ENERGY", "POWERGRID": "⚡ ENERGY", "TATAPOWER": "⚡ ENERGY"
 }
 
-# Renamed core caching function wrapper to 'force_fresh_engine_run' 
-# This overrides and flushes the old stuck container errors permanently!
-@st.cache_data(ttl=600)  
-def force_fresh_engine_run():
+@st.cache_data(ttl=600)  # Caches results for 10 minutes to protect api traffic lanes
+def scan_markets_unblocked():
     scanned_data = []
     
+    # Establish persistent header session
     session = requests.Session()
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    })
+    session.headers.update({'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'})
     
-    tickers_str = " ".join(FO_TICKERS)
-    data = yf.download(tickers_str, period="3mo", interval="1d", group_by="ticker", progress=False, session=session)
+    # Visual loading bar directly inside the Streamlit user interface
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    total_tickers = len(FO_TICKERS)
     
-    for ticker in FO_TICKERS:
+    for index, ticker in enumerate(FO_TICKERS):
         try:
-            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
-            if df.empty or len(df) < 20:
-                continue
-                
-            close_prices = df['Close']
-            ema20 = close_prices.ewm(span=20, adjust=False).mean()
+            status_text.text(f"Scanning data feed: {ticker} ({index + 1}/{total_tickers})...")
+            progress_bar.progress((index + 1) / total_tickers)
             
-            current_price = float(close_prices.iloc[-1])
-            prev_price = float(close_prices.iloc[-2])
-            current_ema20 = float(ema20.iloc[-1])
+            # Request historical data from the highly reliable unthrottled public charting API
+            api_url = f"https://moneycontrol.com{ticker}&resolution=D&from=1577836800&to=2147483647"
+            res = session.get(api_url, timeout=10)
             
-            deviation = ((current_price - current_ema20) / current_ema20) * 100
-            day_change = ((current_price - prev_price) / prev_price) * 100
-            
-            if deviation <= -10:
-                action = "🔴 BUY (Undervalued)"
-            elif deviation >= 10:
-                action = "🟢 SELL (Overvalued)"
-            else:
-                action = "⚪ HOLD / NEUTRAL"
-                
-            scanned_data.append({
-                "Ticker": ticker.replace(".NS", ""),
-                "Price (₹)": round(current_price, 2),
-                "EMA20 (₹)": round(current_ema20, 2),
-                "Deviation (%)": round(deviation, 2),
-                "Action": action,
-                "Change": day_change
-            })
-        except Exception:
+            if res.status_code == 200:
+                json_data = res.json()
+                if 'c' in json_data and json_data['c']:
+                    close_prices = json_data['c']  # Extract array of daily closing prices
+                    
+                    if len(close_prices) >= 20:
+                        df_close = pd.Series(close_prices)
+                        
+                        # Calculate exact 20-period Exponential Moving Average (EMA20)
+                        ema20_series = df_close.ewm(span=20, adjust=False).mean()
+                        
+                        current_price = float(df_close.iloc[-1])
+                        prev_price = float(df_close.iloc[-2])
+                        current_ema20 = float(ema20_series.iloc[-1])
+                        
+                        deviation = ((current_price - current_ema20) / current_ema20) * 100
+                        day_change = ((current_price - prev_price) / prev_price) * 100
+                        
+                        if deviation <= -10:
+                            action = "🔴 BUY (Undervalued)"
+                        elif deviation >= 10:
+                            action = "🟢 SELL (Overvalued)"
+                        else:
+                            action = "⚪ HOLD / NEUTRAL"
+                            
+                        scanned_data.append({
+                            "Ticker": ticker,
+                            "Price (₹)": round(current_price, 2),
+                            "EMA20 (₹)": round(current_ema20, 2),
+                            "Deviation (%)": round(deviation, 2),
+                            "Action": action,
+                            "Change": day_change
+                        })
+        except:
             continue
             
+    # Clear visual status updates upon completion
+    status_text.empty()
+    progress_bar.empty()
     return pd.DataFrame(scanned_data)
 
-# One-click manual refresh button
+# Manual data refresh button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Flushing system lanes and downloading fresh data streams..."):
-    results_df = force_fresh_engine_run()
+with st.spinner("Connecting to public market API streams..."):
+    results_df = scan_markets_unblocked()
 
 if not results_df.empty:
     # Sort entire master list by absolute largest deviation right away
     all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     
-    # Isolate active signal matches cleanly for the side buckets
+    # Isolate active buy and sell signal matches cleanly for the side buckets
     buy_signals_df = all_sorted[all_sorted["Deviation (%)"] <= -10][["Ticker", "Price (₹)", "Deviation (%)"]]
     sell_signals_df = all_sorted[all_sorted["Deviation (%)"] >= 10][["Ticker", "Price (₹)", "Deviation (%)"]]
 
-    # Natively calculate the Sectoral Index change using data we already downloaded
+    # Calculate the Sectoral Index change using data we already downloaded natively
     all_sorted["Sector"] = all_sorted["Ticker"].map(TICKER_SECTORS)
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean()
-    sector_summary = sector_summary.sort_values(by="Change", ascending=False)
+    sector_summary = sector_summary.dropna().sort_values(by="Change", ascending=False)
 
-    # Clean the primary table display by removing raw change column used for sector calculations
+    # Prepare master list table view
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "Action"]]
 
     # --- 📊 FOUR-COLUMN EXTENSIVE DESIGN LAYOUT ---
-    # Width distribution proportions: Master table 50%, Buy 16%, Sell 16%, Sectors 18%
     col_master, col_buy, col_sell, col_sectors = st.columns([0.50, 0.16, 0.16, 0.18])
 
     # Column 1: Master Full F&O Tracker (Left Side)
@@ -167,4 +175,4 @@ if not results_df.empty:
                 unsafe_allow_html=True
             )
 else:
-    st.error("Failed to retrieve market data. Try clicking the Refresh button above.")
+    st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")

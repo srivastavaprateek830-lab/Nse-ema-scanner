@@ -151,6 +151,7 @@ if not results_df.empty:
         sub_col_buy.info("No stocks down.")
 
     # Fixed: Re-routed container targets to use 'sub_col_sell' token to permanently clear the NameError crash
+       # Fixed: Re-routed container targets to use 'sub_col_sell' token to permanently clear the NameError crash
     sub_col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:
         sub_col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
@@ -158,11 +159,14 @@ if not results_df.empty:
         sub_col_sell.info("No stocks pumped.")
 
 
-    col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
+
+    # Fixed: Re-routed container targets to use 'sub_col_sell' token to permanently clear the NameError crash
+    sub_col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:
-        col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
+        sub_col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
     else:
-        col_sell.info("No stocks pumped.")
+        sub_col_sell.info("No stocks pumped.")
+
 
 
         # Balanced Right Container Layout: Sector mappings routed cleanly into sub_col_sectors

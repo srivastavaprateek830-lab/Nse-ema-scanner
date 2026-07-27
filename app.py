@@ -106,54 +106,28 @@ if not results_df.empty:
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean().dropna().sort_values(by="Change", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # --- 🎯 TOP CONPLAY CONDENSED PANELS SECTION ---
-    st.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
-    
-    # Safe fallback extraction: Resolves the Series text array data type printing bug completely
-    sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
-    active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"]) if (sel_rows and len(sel_rows) > 0) else "ACC"
-
-    with st.spinner(f"Updating trend for {active_ticker}..."): 
-        st_matrix_df = get_supertrend_row(active_ticker)
-        
-    # Formatting function: Swaps words with clean visual indicator buttons
-    def format_to_color_dots(val):
-        if 'BULLISH' in str(val): return '🟢 BUY'
-        if 'BEARISH' in str(val): return '🔴 SELL'
-        if 'Stock Name' in str(val): return str(val)
-        return '⚪ NEUTRAL'
-        
-    def style_cells(v):
-        if 'BULLISH' in str(v): return 'background-color: rgba(41, 181, 232, 0.1); color: #29b5e8; font-weight: bold;'
-        if 'BEARISH' in str(v): return 'background-color: rgba(255, 75, 75, 0.1); color: #ff4b4b; font-weight: bold;'
-        return ''
-        
-    if not st_matrix_df.empty:
-        # Fixed: Changed deprecated .applymap() to modern .map() to bypass the Python environment crash
-        styled_dots_df = st_matrix_df.map(format_to_color_dots)
-        st.dataframe(styled_dots_df.style.map(style_cells, subset=['Weekly', 'Daily', 'Hourly', '15 Min']), use_container_width=True, hide_index=True)
-    else:
-        st.info("No trend data loaded.")
-        
-    st.markdown("---")
-
     # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
-    col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
+    # The columns are defined first so we can route the click data to the right column immediately
+    col_master, col_buy, col_sell, col_sectors = st.columns([0.46, 0.17, 0.17, 0.20])
 
+    # Column 1: Watchlist (on_select is placed right here)
     col_master.subheader("🔍 Complete F&O Watchlist")
     selected_row = col_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 
+    # Column 2: Buy Side Box
     col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
     if len(buy_df) > 0:
         col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
     else:
         col_buy.info("No stocks down.")
 
+    # Column 3: Sell Side Box
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:
         col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
     else:
         col_sell.info("No stocks pumped.")
+
 
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:

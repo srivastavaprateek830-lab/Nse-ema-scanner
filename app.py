@@ -2,12 +2,12 @@ import streamlit as st
 import pandas as pd
 from tradingview_ta import get_multiple_analysis, TA_Handler, Interval
 
-# Page configuration for wide dashboard layout
+# Page setup configuration for broad 4-column institutional layout
 st.set_page_config(page_title="NSE F&O Dashboard", layout="wide")
 st.title("📈 NSE F&O Institutional Strategy Dashboard")
-st.write("Scans NSE F&O segments on the Daily (1D) Timeframe using unblocked indicators.")
+st.write("Scans NSE F&O segments on the Daily (1D) Timeframe using unblocked indicator engines.")
 
-# Curated list of high-liquidity NSE F&O Tickers
+# Standardized high-liquidity F&O Ticker list formatted for TradingView's NSE Exchange routing
 FO_TICKERS = [
     "NSE:ACC", "NSE:AARTIIND", "NSE:ABB", "NSE:ADANIENT", "NSE:ADANIPORTS", "NSE:APOLLOHOSP", 
     "NSE:ASIANPAINT", "NSE:AXISBANK", "NSE:BAJAJ_AUTO", "NSE:BAJFINANCE", "NSE:BAJAJFINSV", 
@@ -28,8 +28,7 @@ FO_TICKERS = [
     "NSE:TCS", "NSE:TECHM", "NSE:TITAN", "NSE:TORNTPHARM", "NSE:TRENT", "NSE:TVSMOTOR", 
     "NSE:ULTRACEMCO", "NSE:UPL", "NSE:VEDL", "NSE:VOLTAS", "NSE:WIPRO", "NSE:ZEEL"
 ]
-
-# Structural Lookup matrix mapping tickers to their respective indices
+# Structural Lookup mapping tickers to their respective indices
 TICKER_SECTORS = {
     "ACC": "🏗️ MATERIALS", "AARTIIND": "💊 PHARMA", "ABB": "🏗️ MATERIALS", "ADANIENT": "⚡ ENERGY", "ADANIPORTS": "⚡ ENERGY", "APOLLOHOSP": "💊 PHARMA",
     "ASIANPAINT": "🛒 FMCG", "AXISBANK": "🏦 BANKING", "BAJAJ_AUTO": "🚗 AUTO", "BAJFINANCE": "🏦 BANKING", "BAJAJFINSV": "🏦 BANKING",
@@ -50,6 +49,7 @@ TICKER_SECTORS = {
     "TCS": "💻 IT SECTOR", "TECHM": "💻 IT SECTOR", "TITAN": "🛒 FMCG", "TORNTPHARM": "💊 PHARMA", "TRENT": "🛒 FMCG", "TVSMOTOR": "🚗 AUTO",
     "ULTRACEMCO": "🏗️ MATERIALS", "UPL": "🏗️ MATERIALS", "VEDL": "🏗️ METALS", "VOLTAS": "🏗️ MATERIALS", "WIPRO": "💻 IT SECTOR", "ZEEL": "🛒 FMCG"
 }
+
 @st.cache_data(ttl=300)
 def scan_markets_bulk_tv():
     scanned_data = []
@@ -106,32 +106,32 @@ if not results_df.empty:
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean().dropna().sort_values(by="Change", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # Establish clean horizontal four-column grid layout template
     col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
-    # Display Master Complete Watchlist
     col_master.subheader("🔍 Complete F&O Watchlist")
     selected_row = col_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 
-    # Display Active Breakout Side Panels
     col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
-    col_buy.dataframe(buy_df, use_container_width=True, hide_index=True) if len(buy_df) > 0 else col_buy.info("No stocks down.")
+    if len(buy_df) > 0:
+        col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
+    else:
+        col_buy.info("No stocks down.")
 
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
-    col_sell.dataframe(sell_df, use_container_width=True, hide_index=True) if len(sell_df) > 0 else col_sell.info("No stocks pumped.")
-
-    # Display Calculated Sector Strengths Matrix
+    if len(sell_df) > 0:
+        col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
+    else:
+        col_sell.info("No stocks pumped.")
     col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)
     for _, row in sector_summary.iterrows():
         color = "#29b5e8" if row["Change"] >= 0 else "#ff4b4b"
         sign = "+" if row["Change"] >= 0 else ""
         col_sectors.markdown(f"<div style='padding: 6px; margin-bottom: 4px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px;'><span style='font-size: 12px;'>{row['Sector']}</span><span style='float: right; font-weight: bold; color: {color};'>{sign}{round(row['Change'],2)}%</span></div>", unsafe_allow_html=True)
-    # Render the interactive SuperTrend data display grid cleanly at the base
+
     st.markdown("---")
     st.subheader("🎯 Live Multi-Timeframe SuperTrend Status Matrix")
-    st.caption("💡 Pro-Tip: Click on any stock row in the Watchlist table above to instantly recalculate its SuperTrend columns below.")
+    st.caption("💡 Pro-Tip: Click on any stock row in the 'Complete F&O Watchlist' table above to instantly load its SuperTrend statuses below.")
     
-    # Process chosen selection tags safely without nested indentation layers
     sel_rows = selected_row.get('selection', {}).get('rows', [])
     active_ticker = display_master_df.iloc[sel_rows]["Ticker"] if sel_rows else "ACC"
 
@@ -143,6 +143,9 @@ if not results_df.empty:
         if 'BEARISH' in str(v): return 'background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;'
         return ''
         
-    st.dataframe(st_matrix_df.style.map(style_cells, subset=['Weekly', 'Daily', 'Hourly', '15 Min']), use_container_width=True, hide_index=True)
+    if not st_matrix_df.empty:
+        st.dataframe(st_matrix_df.style.map(style_cells, subset=['Weekly', 'Daily', 'Hourly', '15 Min']), use_container_width=True, hide_index=True)
+    else:
+        st.info("No trend data loaded.")
 else:
     st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")

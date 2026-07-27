@@ -160,14 +160,6 @@ if not results_df.empty:
 
 
 
-    # Fixed: Re-routed container targets to use 'sub_col_sell' token to permanently clear the NameError crash
-    sub_col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
-    if len(sell_df) > 0:
-        sub_col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
-    else:
-        sub_col_sell.info("No stocks pumped.")
-
-
 
         # Balanced Right Container Layout: Sector mappings routed cleanly into sub_col_sectors
     sub_col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)

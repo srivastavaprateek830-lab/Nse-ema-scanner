@@ -1,35 +1,34 @@
 import streamlit as st
 import pandas as pd
-from tradingview_ta import get_multiple_analysis, TA_Handler, Interval
+import requests
 
 # Page setup configuration
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
 st.title("📈 NSE F&O Institutional Strategy Dashboard")
-st.write("Scans NSE F&O segments on the **Daily (1D) Timeframe** using TradingView's bulk technical engine.")
+st.write("Scans NSE F&O segments on the **Daily (1D) Timeframe** using TradingView's unblocked bulk technical engine.")
 
 # Standardized high-liquidity F&O Ticker list formatted for TradingView's NSE Exchange routing
 FO_TICKERS = [
-    "NSE:ACC", "NSE:AARTIIND", "NSE:ABB", "NSE:ADANIENT", "NSE:ADANIPORTS", "NSE:APOLLOHOSP", 
-    "NSE:ASIANPAINT", "NSE:AXISBANK", "NSE:BAJAJ_AUTO", "NSE:BAJFINANCE", "NSE:BAJAJFINSV", 
-    "NSE:BANKBARODA", "NSE:BEL", "NSE:BHARATFORG", "NSE:BHARTIARTL", "NSE:BHEL", "NSE:BPCL", 
-    "NSE:BRITANNIA", "NSE:CANBK", "NSE:CIPLA", "NSE:COALINDIA", "NSE:COFORGE", "NSE:CONCOR", 
-    "NSE:DABUR", "NSE:DIVISLAB", "NSE:DIXON", "NSE:DLF", "NSE:DRREDDY", "NSE:EICHERMOT", 
-    "NSE:GAIL", "NSE:GLENMARK", "NSE:GODREJCP", "NSE:GODREJPROP", "NSE:GRASIM", "NSE:HAL", 
-    "NSE:HAVELLS", "NSE:HCLTECH", "NSE:HDFCBANK", "NSE:HDFCLIFE", "NSE:HEROMOTOCO", 
-    "NSE:HINDALCO", "NSE:HINDUNILVR", "NSE:ICICIBANK", "NSE:ICICIGI", "NSE:IDEA", "NSE:IGL", 
-    "NSE:INDHOTEL", "NSE:INDIGO", "NSE:INDUSINDBK", "NSE:INDUSTOWER", "NSE:INFY", "NSE:IOC", 
-    "NSE:IRCTC", "NSE:ITC", "NSE:JINDALSTEL", "NSE:JSWSTEEL", "NSE:KOTAKBANK", "NSE:LT", 
-    "NSE:LTIM", "NSE:LUPIN", "NSE:M_M", "NSE:MARICO", "NSE:MARUTI", "NSE:MCX", "NSE:MUTHOOTFIN", 
-    "NSE:NATIONALUM", "NSE:NAUKRI", "NSE:NESTLEIND", "NSE:NMDC", "NSE:NTPC", "NSE:ONGC", 
-    "NSE:PERSISTENT", "NSE:PFC", "NSE:PIDILITIND", "NSE:PNB", "NSE:POLYCAB", "NSE:POWERGRID", 
-    "NSE:REC", "NSE:RELIANCE", "NSE:SAIL", "NSE:SBICARD", "NSE:SBILIFE", "NSE:SBIN", 
-    "NSE:SHRIRAMFIN", "NSE:SIEMENS", "NSE:SRF", "NSE:SUNPHARMA", "NSE:TATACHEMICAL", 
-    "NSE:TATACOMM", "NSE:TATACONSUM", "NSE:TATAMOTORS", "NSE:TATAPOWER", "NSE:TATASTEEL", 
-    "NSE:TCS", "NSE:TECHM", "NSE:TITAN", "NSE:TORNTPHARM", "NSE:TRENT", "NSE:TVSMOTOR", 
-    "NSE:ULTRACEMCO", "NSE:UPL", "NSE:VEDL", "NSE:VOLTAS", "NSE:WIPRO", "NSE:ZEEL"
+    "ACC", "AARTIIND", "ABB", "ADANIENT", "ADANIPORTS", "APOLLOHOSP", 
+    "ASIANPAINT", "AXISBANK", "BAJAJ_AUTO", "BAJFINANCE", "BAJAJFINSV", 
+    "BANKBARODA", "BEL", "BHARATFORG", "BHARTIARTL", "BHEL", "BPCL", 
+    "BRITANNIA", "CANBK", "CIPLA", "COALINDIA", "COFORGE", "CONCOR", 
+    "DABUR", "DIVISLAB", "DIXON", "DLF", "DRREDDY", "EICHERMOT", 
+    "GAIL", "GLENMARK", "GODREJCP", "GODREJPROP", "GRASIM", "HAL", 
+    "HAVELLS", "HCLTECH", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO", 
+    "HINDALCO", "HINDUNILVR", "ICICIBANK", "ICICIGI", "IDEA", "IGL", 
+    "INDHOTEL", "INDIGO", "INDUSINDBK", "INDUSTOWER", "INFY", "IOC", 
+    "IRCTC", "ITC", "JINDALSTEL", "JSWSTEEL", "KOTAKBANK", "LT", 
+    "LTIM", "LUPIN", "M_M", "MARICO", "MARUTI", "MCX", "MUTHOOTFIN", 
+    "NATIONALUM", "NAUKRI", "NESTLEIND", "NMDC", "NTPC", "ONGC", 
+    "PERSISTENT", "PFC", "PIDILITIND", "PNB", "POLYCAB", "POWERGRID", 
+    "REC", "RELIANCE", "SAIL", "SBICARD", "SBILIFE", "SBIN", 
+    "SHRIRAMFIN", "SIEMENS", "SRF", "SUNPHARMA", "TATACHEMICAL", 
+    "TATACOMM", "TATACONSUM", "TATAMOTORS", "TATAPOWER", "TATASTEEL", 
+    "TCS", "TECHM", "TITAN", "TORNTPHARM", "TRENT", "TVSMOTOR", 
+    "ULTRACEMCO", "UPL", "VEDL", "VOLTAS", "WIPRO", "ZEEL"
 ]
 
-# Sector Mapping Lookup table to calculate performance values natively
 TICKER_SECTORS = {
     "ACC": "🏗️ MATERIALS", "AARTIIND": "💊 PHARMA", "ABB": "🏗️ MATERIALS", "ADANIENT": "⚡ ENERGY", "ADANIPORTS": "⚡ ENERGY", "APOLLOHOSP": "💊 PHARMA",
     "ASIANPAINT": "🛒 FMCG", "AXISBANK": "🏦 BANKING", "BAJAJ_AUTO": "🚗 AUTO", "BAJFINANCE": "🏦 BANKING", "BAJAJFINSV": "🏦 BANKING",
@@ -52,24 +51,31 @@ TICKER_SECTORS = {
 }
 
 @st.cache_data(ttl=300)
-def scan_markets_bulk_tv():
+def scan_markets_native_tv():
     scanned_data = []
     try:
-        bulk_analysis = get_multiple_analysis(screener="india", symbols=FO_TICKERS, interval=Interval.INTERVAL_1_DAY)
-        for full_symbol, analysis in bulk_analysis.items():
-            if not analysis:
-                continue
-            try:
-                ticker = full_symbol.split(":")
-                indicators = analysis.indicators
-                current_price = float(indicators.get("close", 0.0))
-                current_ema20 = float(indicators.get("EMA20", 0.0))
-                day_change = float(indicators.get("change", 0.0))
-                rsi14 = float(indicators.get("RSI", 50.0))
+        # Talk directly to TradingView's official unblocked scanning endpoint
+        url = "https://tradingview.com"
+        payload = {
+            "symbols": {"tickers": [f"NSE:{t}" for t in FO_TICKERS], "query": {"types": []}},
+            "columns": ["close", "EMA20", "change", "RSI"]
+        }
+        res = requests.post(url, json=payload, timeout=15)
+        if res.status_code == 200:
+            json_data = res.json().get('data', [])
+            for item in json_data:
+                ticker = item.get('s', '').split(':')[-1]
+                metrics = item.get('d', [0.0, 0.0, 0.0, 50.0])
+                current_price = float(metrics[0] if metrics[0] is not None else 0.0)
+                current_ema20 = float(metrics[1] if metrics[1] is not None else 0.0)
+                day_change = float(metrics[2] if metrics[2] is not None else 0.0)
+                rsi14 = float(metrics[3] if metrics[3] is not None else 50.0)
+                
                 if current_price == 0.0 or current_ema20 == 0.0:
                     continue
                 deviation = ((current_price - current_ema20) / current_ema20) * 100
                 action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
+                
                 scanned_data.append({
                     "Ticker": ticker.replace("_", "&"),
                     "Price (₹)": round(current_price, 2),
@@ -79,30 +85,39 @@ def scan_markets_bulk_tv():
                     "Action": action,
                     "Change": day_change
                 })
-            except:
-                continue
     except Exception as e:
-        st.error(f"Bulk data pipe error: {str(e)}")
+        st.error(f"Scanner connection error: {str(e)}")
     return pd.DataFrame(scanned_data)
 
-def get_supertrend_row(ticker_clean):
-    timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
+def get_supertrend_matrix_native(ticker_clean):
+    # Fetch all timeframes in a clean single request block natively
+    timeframes = {"Weekly": "W", "Daily": "D", "Hourly": "60", "15 Min": "15"}
     st_row = {"Stock Name": ticker_clean}
     query_ticker = ticker_clean.replace("&", "_")
+    
+    url = "https://tradingview.com"
     for label, tf in timeframes.items():
         try:
-            handler = TA_Handler(family="standard", symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
-            analysis = handler.get_analysis()
-            st_lower = analysis.indicators.get("Supertrend.lower")
-            st_upper = analysis.indicators.get("Supertrend.upper")
-            close_val = analysis.indicators.get("close")
-            if st_lower is not None and close_val >= st_lower:
-                st_row[label] = "🟢 BULLISH"
-            elif st_upper is not None and close_val <= st_upper:
-                st_row[label] = "🔴 BEARISH"
+            payload = {
+                "symbols": {"tickers": [f"NSE:{query_ticker}"], "query": {"types": []}},
+                "columns": [f"Supertrend.lower|{tf}", f"Supertrend.upper|{tf}", f"close|{tf}", f"recommendation|{tf}"]
+            }
+            res = requests.post(url, json=payload, timeout=5)
+            if res.status_code == 200:
+                metrics = res.json().get('data', [{}])[0].get('d', [None, None, 0.0, 0.0])
+                st_lower = metrics[0]
+                st_upper = metrics[1]
+                close_val = metrics[2] if metrics[2] is not None else 0.0
+                rec_val = metrics[3]
+                
+                if st_lower is not None and close_val >= st_lower:
+                    st_row[label] = "🟢 BULLISH"
+                elif st_upper is not None and close_val <= st_upper:
+                    st_row[label] = "🔴 BEARISH"
+                else:
+                    st_row[label] = "🟢 BULLISH" if (rec_val and rec_val > 0) else ("🔴 BEARISH" if (rec_val and rec_val < 0) else "⚪ NEUTRAL")
             else:
-                summary = analysis.summary.get("RECOMMENDATION", "")
-                st_row[label] = "🟢 BULLISH" if "BUY" in summary else ("🔴 BEARISH" if "SELL" in summary else "⚪ NEUTRAL")
+                st_row[label] = "⚪ NEUTRAL"
         except:
             st_row[label] = "⚪ NEUTRAL"
     return pd.DataFrame([st_row])
@@ -110,8 +125,8 @@ def get_supertrend_row(ticker_clean):
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Executing high-speed indicators tracking streams..."):
-    results_df = scan_markets_bulk_tv()
+with st.spinner("Executing high-speed institutional data pipelines..."):
+    results_df = scan_markets_native_tv()
 
 if not results_df.empty:
     all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)

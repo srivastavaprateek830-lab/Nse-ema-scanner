@@ -149,12 +149,18 @@ if not results_df.empty:
     # Buy Panel
     col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.15); padding: 12px; border-radius: 6px; border-left: 5px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (Deviation &lt; -10%)</div>", unsafe_allow_html=True)
     col_buy.markdown("<br>", unsafe_allow_html=True)
-    col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True) if not buy_signals_df.empty else col_buy.info("No stocks down past the -10% buy line.")
+    if not buy_signals_df.empty:
+        col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
+    else:
+        col_buy.info("No stocks down past the -10% buy line.")
 
     # Sell Panel
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.15); padding: 12px; border-radius: 6px; border-left: 5px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (Deviation &gt; +10%)</div>", unsafe_allow_html=True)
     col_sell.markdown("<br>", unsafe_allow_html=True)
-    col_sell.dataframe(sell_signals_df, use_container_width=True, hide_index=True) if not sell_signals_df.empty else col_sell.info("No stocks pumped past the +10% sell line.")
+    if not sell_signals_df.empty:
+        col_sell.dataframe(sell_signals_df, use_container_width=True, hide_index=True)
+    else:
+        col_sell.info("No stocks pumped past the +10% sell line.")
 
     # --- 🛠️ TABULAR SUPERTREND GRID LOOKUP PANEL ---
     st.markdown("---")
@@ -164,12 +170,12 @@ if not results_df.empty:
     # Process clicked row to identify active stock
     active_stock_clean = "ACC"
     if selected_row and 'rows' in selected_row.get('selection', {}) and selected_row['selection']['rows']:
-        clicked_idx = selected_row['selection']['rows'][0]
+        clicked_idx = selected_row['selection']['rows']
         active_stock_clean = all_sorted.iloc[clicked_idx]["Ticker"]
 
     # Calculate trends directly from downloaded daily datasets
     ticker_ns_key = f"{active_stock_clean}.NS"
-    stock_history_df = raw_downloaded_data[ticker_ns_key].dropna() if ticker_ns_key in raw_downloaded_data.columns.levels[0] else pd.DataFrame()
+    stock_history_df = raw_downloaded_data[ticker_ns_key].dropna() if ticker_ns_key in raw_downloaded_data.columns.levels else pd.DataFrame()
 
     # Calculate timeframes natively by re-sampling the Daily bars array data framework
     daily_trend = calculate_supertrend(stock_history_df)
@@ -180,7 +186,7 @@ if not results_df.empty:
     
     # Since intraday data isn't tracked in a daily endpoint, we approximate intraday momentum 
     # based on session standard deviation parameters to keep the table fully populated with calculations
-    hourly_trend = "🟢 BULLISH" if (daily_trend == "🟢 BULLISH" and all_sorted.loc[all_sorted["Ticker"] == active_stock_clean, "Deviation (%)"].values[0] > 0) else "🔴 BEARISH"
+    hourly_trend = "🟢 BULLISH" if (daily_trend == "🟢 BULLISH" and all_sorted.loc[all_sorted["Ticker"] == active_stock_clean, "Deviation (%)"].values > 0) else "🔴 BEARISH"
     min15_trend = "🟢 BULLISH" if (hourly_trend == "🟢 BULLISH") else "🔴 BEARISH"
 
     # Compile the final tabular matrix data configuration frame

@@ -127,7 +127,6 @@ if not results_df.empty:
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
     # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
-    # Bulletproof Flat Configuration: Removes nested layout wrappers entirely to guarantee zero indentation risks
     col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
     # Column 1: Watchlist
@@ -137,12 +136,9 @@ if not results_df.empty:
     # Column 2: Buy Side Box
     col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
     col_buy.markdown("<br>", unsafe_allow_html=True)
-    if not buy_signals_df.empty:
-        col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
-    else:
-        col_buy.info("No stocks meet strict -10% buy deviation.")
+    # Fixed: Re-arranged using an inline layout to guarantee no multi-line conditional crashes
+    col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True) if not buy_signals_df.empty else col_buy.info("No stocks meet strict -10% buy deviation.")
 
     # Column 3: Sell Side Box
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
     col_sell.markdown("<br>", unsafe_allow_html=True)
-    if not sell_signals_df.empty:

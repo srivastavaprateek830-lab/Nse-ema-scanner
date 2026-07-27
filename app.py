@@ -6,12 +6,12 @@ import requests
 # Fix for Yahoo Finance cache location on Streamlit servers
 yf.set_tz_cache_location("/tmp/yf_cache")
 
-# Set up page configuration for an expansive grid
+# Set up page configuration for an expansive grid layout
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
 st.title("📈 NSE F&O EMA20 Deviation Scanner")
 st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
 
-# List of prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
+# Curated list of high-liquidity NSE F&O Tickers
 FO_TICKERS = [
     "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
     "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
@@ -33,23 +33,20 @@ FO_TICKERS = [
     "ULTRACEMCO.NS", "UPL.NS", "VEDL.NS", "VOLTAS.NS", "WIPRO.NS", "ZEEL.NS"
 ]
 
-@st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain speed
+@st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain stability
 def scan_markets():
     scanned_data = []
     
-    # Formulate a clean browser session to keep yfinance downloads running smooth
+    # Formulate a clean browser session to keep yfinance downloads running smoothly
     session = requests.Session()
     session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     })
     
-    # Download data in bulk using the corrected '3mo' duration value
-    tickers_str = " ".join(FO_TICKERS)
-    data = yf.download(tickers_str, period="3mo", interval="1d", group_by="ticker", progress=False, session=session)
-    
+    # Process individual loops to prevent bulk connection dropping blocks
     for ticker in FO_TICKERS:
         try:
-            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
+            df = yf.download(ticker, period="3mo", interval="1d", progress=False, session=session, show_errors=False)
             if df.empty or len(df) < 20:
                 continue
                 
@@ -61,9 +58,9 @@ def scan_markets():
             deviation = ((current_price - current_ema20) / current_ema20) * 100
             
             if deviation <= -10:
-                action = "🔴 BUY (Undervalued)"
+                action = "🔴 BUY"
             elif deviation >= 10:
-                action = "🟢 SELL (Overvalued)"
+                action = "🟢 SELL"
             else:
                 action = "⚪ HOLD / NEUTRAL"
                 
@@ -74,14 +71,14 @@ def scan_markets():
                 "Deviation (%)": round(deviation, 2),
                 "Action": action
             })
-        except Exception:
+        except:
             continue
             
     return pd.DataFrame(scanned_data)
 
 @st.cache_data(ttl=600)
 def fetch_sectoral_matrix():
-    """Bypasses Yahoo constraints by querying open Google Finance web feeds."""
+    """Queries open web structures on Google Finance to obtain index performance metrics safely."""
     sectors = {
         "BANKING": "BANKNIFTY", "IT SECTOR": "NIFTYIT", "AUTOMOBILE": "NIFTYAUTO",
         "PHARMA": "NIFTYPHARMA", "FMCG": "NIFTYFMCG", "METALS": "NIFTYMETAL",
@@ -92,7 +89,6 @@ def fetch_sectoral_matrix():
     
     for label, sym in sectors.items():
         try:
-            # Query broad institutional ticker dashboard profiles
             url = f"https://google.com{sym}:INDEXNSE"
             res = requests.get(url, headers=headers, timeout=5)
             if res.status_code == 200 and 'data-price-change-percentage="' in res.text:
@@ -103,7 +99,6 @@ def fetch_sectoral_matrix():
             continue
             
     if not perf_list:
-        # Static backup values if Google feeds timeout over weekends
         return pd.DataFrame([{"Sector": k, "Change (%)": 0.0} for k in sectors.keys()])
     return pd.DataFrame(perf_list).sort_values(by="Change (%)", ascending=False)
 
@@ -111,7 +106,7 @@ def fetch_sectoral_matrix():
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Scanning active matrix tracks... This takes a few seconds."):
+with st.spinner("Streaming safe institutional data tracks... This takes a few seconds."):
     results_df = scan_markets()
     sector_df = fetch_sectoral_matrix()
 
@@ -127,30 +122,30 @@ if not results_df.empty:
     # Width distribution proportions: Master table 50%, Buy 16%, Sell 16%, Sectors 18%
     col_master, col_buy, col_sell, col_sectors = st.columns([0.50, 0.16, 0.16, 0.18])
 
-    # Column 1: Master Full F&O Tracker
+    # Column 1: Master Full F&O Tracker (Left Side)
     with col_master:
         st.subheader("🔍 Complete F&O Watchlist")
         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
 
-    # Column 2: Buy Side Box Panel
+    # Column 2: Buy Side Box Panel (Middle Left)
     with col_buy:
         st.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&lt; -10%)</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         if not buy_signals_df.empty:
             st.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No buy setups triggered.")
+            st.info("No stocks down past the -10% buy line.")
 
-    # Column 3: Sell Side Box Panel
+    # Column 3: Sell Side Box Panel (Middle Right)
     with col_sell:
         st.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&gt; +10%)</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         if not sell_signals_df.empty:
             st.dataframe(sell_signals_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No sell setups triggered.")
+            st.info("No stocks pumped past the +10% sell line.")
 
-    # Column 4: Dedicated Sector Performance Panel
+    # Column 4: Dedicated Sector Performance Panel (Far Right Side)
     with col_sectors:
         st.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
@@ -160,7 +155,7 @@ if not results_df.empty:
             name = row["Sector"]
             change = row["Change (%)"]
             
-            # Dynamic green/red indicator font text values based on status
+            # Dynamic cyan/red indicator font text values based on status
             color = "#29b5e8" if change >= 0 else "#ff4b4b"
             sign = "+" if change >= 0 else ""
             

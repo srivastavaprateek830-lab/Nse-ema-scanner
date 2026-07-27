@@ -51,36 +51,30 @@ TICKER_SECTORS = {
     "ULTRACEMCO": "🏗️ MATERIALS", "UPL": "🏗️ MATERIALS", "VEDL": "🏗️ METALS", "VOLTAS": "🏗️ MATERIALS", "WIPRO": "💻 IT SECTOR", "ZEEL": "🛒 FMCG"
 }
 
-@st.cache_data(ttl=300) # Fast 5-minute tracking cache refresh layer
+@st.cache_data(ttl=300)
 def scan_markets_bulk_tv():
     scanned_data = []
     try:
         bulk_analysis = get_multiple_analysis(screener="india", symbols=FO_TICKERS, interval=Interval.INTERVAL_1_DAY)
-        
         for full_symbol, analysis in bulk_analysis.items():
             if not analysis:
                 continue
             try:
-                ticker = full_symbol.split(":")
+                ticker = full_symbol.split(":")[1]
                 indicators = analysis.indicators
-                
                 current_price = float(indicators.get("close", 0.0))
                 current_ema20 = float(indicators.get("EMA20", 0.0))
                 day_change = float(indicators.get("change", 0.0))
                 rsi14 = float(indicators.get("RSI", 50.0))
-                
                 if current_price == 0.0 or current_ema20 == 0.0:
                     continue
-                    
                 deviation = ((current_price - current_ema20) / current_ema20) * 100
-                
                 if deviation <= -10.0:
                     action = "🔴 BUY" if rsi14 < 35 else "🔴 BUY (Weak RSI)"
                 elif deviation >= 10.0:
                     action = "🟢 SELL" if rsi14 > 65 else "🟢 SELL (Weak RSI)"
                 else:
                     action = "⚪ HOLD"
-                    
                 scanned_data.append({
                     "Ticker": ticker.replace("_", "&"),
                     "Price (₹)": round(current_price, 2),
@@ -94,11 +88,9 @@ def scan_markets_bulk_tv():
                 continue
     except Exception as e:
         st.error(f"Bulk data pipe error: {str(e)}")
-        
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_timeframes(ticker_clean):
-    # Fixed: Swapped incorrect attribute keys with verified TradingView interval properties
     timeframes = {
         "📊 Weekly Trend": Interval.INTERVAL_1_WEEK,
         "📅 Daily Trend": Interval.INTERVAL_1_DAY,
@@ -107,21 +99,13 @@ def get_supertrend_timeframes(ticker_clean):
     }
     st_results = {}
     query_ticker = ticker_clean.replace("&", "_")
-    
     for label, tf in timeframes.items():
         try:
-            handler = TA_Handler(
-                symbol=query_ticker,
-                exchange="NSE",
-                screener="india",
-                interval=tf
-            )
+            handler = TA_Handler(symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
             analysis = handler.get_analysis()
-            
             st_lower = analysis.indicators.get("Supertrend.lower")
             st_upper = analysis.indicators.get("Supertrend.upper")
             close_val = analysis.indicators.get("close")
-            
             if st_lower is not None and close_val >= st_lower:
                 st_results[label] = "🟢 BULLISH (BUY)"
             elif st_upper is not None and close_val <= st_upper:
@@ -136,10 +120,8 @@ def get_supertrend_timeframes(ticker_clean):
                     st_results[label] = "⚪ NEUTRAL"
         except:
             st_results[label] = "⚪ NEUTRAL"
-            
     return st_results
 
-# Refresh framework initialization panel button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
@@ -147,24 +129,31 @@ with st.spinner("Executing high-speed institutional indicators tracking streams.
     results_df = scan_markets_bulk_tv()
 
 if not results_df.empty:
-    # Sort absolute deviations largest to smallest
     all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
-    
-    # Isolate targets that fulfill the exact strict 10% boundary requirements
     buy_signals_df = all_sorted[all_sorted["Deviation (%)"] <= -10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
     sell_signals_df = all_sorted[all_sorted["Deviation (%)"] >= 10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
-
-    # Natively summarize the Sector Index values
     all_sorted["Sector"] = all_sorted["Ticker"].map(TICKER_SECTORS)
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean()
     sector_summary = sector_summary.dropna().sort_values(by="Change", ascending=False)
-
-    # Master frame view configuration data
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # --- 🛠️ INTERACTIVE SUPERTREND SECTION ---
     st.markdown("---")
     st.subheader("🎯 Live Multi-Timeframe SuperTrend Inspector")
     selected_stock = st.selectbox("Click here to select a stock to check its real-time multi-timeframe trend confluence:", sorted(all_sorted["Ticker"].unique()))
-    
+
     if selected_stock:
+        with st.spinner(f"Analyzing multi-timeframe charts for {selected_stock}..."):
+            st_trends = get_supertrend_timeframes(selected_stock)
+        st_cols = st.columns(len(st_trends))
+        for idx, (tf_name, trend_status) in enumerate(st_trends.items()):
+            with st_cols[idx]:
+                if "BULLISH" in trend_status:
+                    bg_color = "rgba(41, 181, 232, 0.12)"
+                    border_color = "#29b5e8"
+                elif "BEARISH" in trend_status:
+                    bg_color = "rgba(255, 75, 75, 0.12)"
+                    border_color = "#ff4b4b"
+                else:
+                    bg_color = "rgba(255, 255, 255, 0.05)"
+                    border_color = "#777777"
+                st.markdown(

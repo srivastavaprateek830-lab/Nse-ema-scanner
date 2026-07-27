@@ -38,11 +38,11 @@ TICKER_SECTORS = {
     "AXISBANK": "🏦 BANKING", "BANKBARODA": "🏦 BANKING", "CANBK": "🏦 BANKING", "HDFCBANK": "🏦 BANKING", "ICICIBANK": "🏦 BANKING", "KOTAKBANK": "🏦 BANKING", "PNB": "🏦 BANKING", "SBIN": "🏦 BANKING",
     "COFORGE": "💻 IT SECTOR", "HCLTECH": "💻 IT SECTOR", "INFY": "💻 IT SECTOR", "LTIM": "💻 IT SECTOR", "PERSISTENT": "💻 IT SECTOR", "TCS": "💻 IT SECTOR", "TECHM": "💻 IT SECTOR", "WIPRO": "💻 IT SECTOR",
     "BAJAJ-AUTO": "🚗 AUTO", "EICHERMOT": "🚗 AUTO", "HEROMOTOCO": "🚗 AUTO", "M&M": "🚗 AUTO", "MARUTI": "🚗 AUTO", "TATAMOTORS": "🚗 AUTO", "TVSMOTOR": "🚗 AUTO",
-    "CIPLA": "💊 PHARMA", "DIVISLAB": "💊 PHARMA", "DRREDDY": "💊 PHARMA", "GLENMARK": "💊 PHARMA", "LUPIN": "💊 PHARMA", "SUNPHARMA", "TORNTPHARM": "💊 PHARMA",
+    "CIPLA": "💊 PHARMA", "DIVISLAB": "💊 PHARMA", "DRREDDY": "💊 PHARMA", "GLENMARK": "💊 PHARMA", "LUPIN": "💊 PHARMA", "SUNPHARMA": "💊 PHARMA", "TORNTPHARM": "💊 PHARMA",
     "BRITANNIA": "🛒 FMCG", "DABUR": "🛒 FMCG", "HINDUNILVR": "🛒 FMCG", "ITC": "🛒 FMCG", "NESTLEIND": "🛒 FMCG", "TATACONSUM": "🛒 FMCG",
     "HINDALCO": "🏗️ METALS", "JINDALSTEL": "🏗️ METALS", "JSWSTEEL": "🏗️ METALS", "NATIONALUM": "🏗️ METALS", "SAIL": "🏗️ METALS", "TATASTEEL": "🏗️ METALS", "VEDL": "🏗️ METALS",
     "DLF": "🏢 REALTY", "GODREJPROP": "🏢 REALTY", "OBEROIRLTY": "🏢 REALTY",
-    "ADANIPORTS": "⚡ ENERGY", "BPCL": "⚡ ENERGY", "COALINDIA": "⚡ ENERGY", "GAIL": "⚡ ENERGY", "HINDPETRO": "⚡ ENERGY", "IOC": "⚡ ENERGY", "NTPC": "⚡ ENERGY", "ONGC", "POWERGRID": "⚡ ENERGY", "TATAPOWER": "⚡ ENERGY"
+    "ADANIPORTS": "⚡ ENERGY", "BPCL": "⚡ ENERGY", "COALINDIA": "⚡ ENERGY", "GAIL": "⚡ ENERGY", "HINDPETRO": "⚡ ENERGY", "IOC": "⚡ ENERGY", "NTPC": "⚡ ENERGY", "ONGC": "⚡ ENERGY", "POWERGRID": "⚡ ENERGY", "TATAPOWER": "⚡ ENERGY"
 }
 
 @st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain speed
@@ -117,7 +117,7 @@ if not results_df.empty:
 
     # Natively calculate the Sectoral Index change using data we already downloaded
     all_sorted["Sector"] = all_sorted["Ticker"].map(TICKER_SECTORS)
-    sector_summary = all_sorted.groupby("Sector")["Change"].mean().reset_index()
+    sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean()
     sector_summary = sector_summary.sort_values(by="Change", ascending=False)
 
     # Clean the primary table display by removing raw change column used for sector calculations
@@ -169,7 +169,6 @@ if not results_df.empty:
                 f"<span style='font-size: 13px; font-weight: 500;'>{name}</span>"
                 f"<span style='float: right; font-weight: bold; color: {color};'>{sign}{change}%</span>"
                 f"</div>", 
-                with_html=True if 'with_html' in dir(st.markdown) else None, # Compatibility safe check
                 unsafe_allow_html=True
             )
 else:

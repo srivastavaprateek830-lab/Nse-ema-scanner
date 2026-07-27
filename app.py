@@ -1,32 +1,32 @@
 import streamlit as st
 import pandas as pd
-from tradingview_ta import TA_Handler, Interval
+from tradingview_ta import get_multiple_analysis, Interval
 
-# Set up page configuration for an expansive 4-column layout
+# Page setup configuration
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
-st.title("📈 NSE F&O EMA20 Deviation Scanner")
-st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA baseline via TradingView Data Core.")
+st.title("📈 NSE F&O Institutional Strategy Dashboard")
+st.write("Scans NSE F&O segments on the **Daily (1D) Timeframe** using TradingView's bulk technical engine.")
 
-# List of prominent NSE F&O Tickers
+# Standardized high-liquidity F&O Ticker list formatted for TradingView's NSE Exchange routing
 FO_TICKERS = [
-    "ACC", "AARTIIND", "ABB", "ADANIENT", "ADANIPORTS", "APOLLOHOSP", 
-    "ASIANPAINT", "AXISBANK", "BAJAJ_AUTO", "BAJFINANCE", "BAJAJFINSV", 
-    "BANKBARODA", "BEL", "BHARATFORG", "BHARTIARTL", "BHEL", "BPCL", 
-    "BRITANNIA", "CANBK", "CIPLA", "COALINDIA", "COFORGE", "CONCOR", 
-    "DABUR", "DIVISLAB", "DIXON", "DLF", "DRREDDY", "EICHERMOT", 
-    "GAIL", "GLENMARK", "GODREJCP", "GODREJPROP", "GRASIM", "HAL", 
-    "HAVELLS", "HCLTECH", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO", 
-    "HINDALCO", "HINDUNILVR", "ICICIBANK", "ICICIGI", "IDEA", "IGL", 
-    "INDHOTEL", "INDIGO", "INDUSINDBK", "INDUSTOWER", "INFY", "IOC", 
-    "IRCTC", "ITC", "JINDALSTEL", "JSWSTEEL", "KOTAKBANK", "LT", 
-    "LTIM", "LUPIN", "M_M", "MARICO", "MARUTI", "MCX", "MUTHOOTFIN", 
-    "NATIONALUM", "NAUKRI", "NESTLEIND", "NMDC", "NTPC", "ONGC", 
-    "PERSISTENT", "PFC", "PIDILITIND", "PNB", "POLYCAB", "POWERGRID", 
-    "REC", "RELIANCE", "SAIL", "SBICARD", "SBILIFE", "SBIN", 
-    "SHRIRAMFIN", "SIEMENS", "SRF", "SUNPHARMA", "TATACHEMICAL", 
-    "TATACOMM", "TATACONSUM", "TATAMOTORS", "TATAPOWER", "TATASTEEL", 
-    "TCS", "TECHM", "TITAN", "TORNTPHARM", "TRENT", "TVSMOTOR", 
-    "ULTRACEMCO", "UPL", "VEDL", "VOLTAS", "WIPRO", "ZEEL"
+    "NSE:ACC", "NSE:AARTIIND", "NSE:ABB", "NSE:ADANIENT", "NSE:ADANIPORTS", "NSE:APOLLOHOSP", 
+    "NSE:ASIANPAINT", "NSE:AXISBANK", "NSE:BAJAJ_AUTO", "NSE:BAJFINANCE", "NSE:BAJAJFINSV", 
+    "NSE:BANKBARODA", "NSE:BEL", "NSE:BHARATFORG", "NSE:BHARTIARTL", "NSE:BHEL", "NSE:BPCL", 
+    "NSE:BRITANNIA", "NSE:CANBK", "NSE:CIPLA", "NSE:COALINDIA", "NSE:COFORGE", "NSE:CONCOR", 
+    "NSE:DABUR", "NSE:DIVISLAB", "NSE:DIXON", "NSE:DLF", "NSE:DRREDDY", "NSE:EICHERMOT", 
+    "NSE:GAIL", "NSE:GLENMARK", "NSE:GODREJCP", "NSE:GODREJPROP", "NSE:GRASIM", "NSE:HAL", 
+    "NSE:HAVELLS", "NSE:HCLTECH", "NSE:HDFCBANK", "NSE:HDFCLIFE", "NSE:HEROMOTOCO", 
+    "NSE:HINDALCO", "NSE:HINDUNILVR", "NSE:ICICIBANK", "NSE:ICICIGI", "NSE:IDEA", "NSE:IGL", 
+    "NSE:INDHOTEL", "NSE:INDIGO", "NSE:INDUSINDBK", "NSE:INDUSTOWER", "NSE:INFY", "NSE:IOC", 
+    "NSE:IRCTC", "NSE:ITC", "NSE:JINDALSTEL", "NSE:JSWSTEEL", "NSE:KOTAKBANK", "NSE:LT", 
+    "NSE:LTIM", "NSE:LUPIN", "NSE:M_M", "NSE:MARICO", "NSE:MARUTI", "NSE:MCX", "NSE:MUTHOOTFIN", 
+    "NSE:NATIONALUM", "NSE:NAUKRI", "NSE:NESTLEIND", "NSE:NMDC", "NSE:NTPC", "NSE:ONGC", 
+    "NSE:PERSISTENT", "NSE:PFC", "NSE:PIDILITIND", "NSE:PNB", "NSE:POLYCAB", "NSE:POWERGRID", 
+    "NSE:REC", "NSE:RELIANCE", "NSE:SAIL", "NSE:SBICARD", "NSE:SBILIFE", "NSE:SBIN", 
+    "NSE:SHRIRAMFIN", "NSE:SIEMENS", "NSE:SRF", "NSE:SUNPHARMA", "NSE:TATACHEMICAL", 
+    "NSE:TATACOMM", "NSE:TATACONSUM", "NSE:TATAMOTORS", "NSE:TATAPOWER", "NSE:TATASTEEL", 
+    "NSE:TCS", "NSE:TECHM", "NSE:TITAN", "NSE:TORNTPHARM", "NSE:TRENT", "NSE:TVSMOTOR", 
+    "NSE:ULTRACEMCO", "NSE:UPL", "NSE:VEDL", "NSE:VOLTAS", "NSE:WIPRO", "NSE:ZEEL"
 ]
 
 # Sector Mapping Lookup table to calculate performance values natively
@@ -38,132 +38,111 @@ TICKER_SECTORS = {
     "BRITANNIA": "🛒 FMCG", "DABUR": "🛒 FMCG", "HINDUNILVR": "🛒 FMCG", "ITC": "🛒 FMCG", "NESTLEIND": "🛒 FMCG", "TATACONSUM": "🛒 FMCG",
     "HINDALCO": "🏗️ METALS", "JINDALSTEL": "🏗️ METALS", "JSWSTEEL": "🏗️ METALS", "NATIONALUM": "🏗️ METALS", "SAIL": "🏗️ METALS", "TATASTEEL": "🏗️ METALS", "VEDL": "🏗️ METALS",
     "DLF": "🏢 REALTY", "GODREJPROP": "🏢 REALTY", "OBEROIRLTY": "🏢 REALTY",
-    "ADANIPORTS": "⚡ ENERGY", "BPCL": "⚡ ENERGY", "COALINDIA": "⚡ ENERGY", "GAIL": "⚡ ENERGY", "HINDPETRO": "⚡ ENERGY", "IOC": "⚡ ENERGY", "NTPC": "⚡ ENERGY", "ONGC": "⚡ ENERGY", "POWERGRID": "⚡ ENERGY", "TATAPOWER": "⚡ ENERGY"
+    "ADANIPORTS": "⚡ ENERGY", "BPCL": "⚡ ENERGY", "COALINDIA": "⚡ ENERGY", "GAIL": "⚡ ENERGY", "HINDPETRO": "⚡ ENERGY", "IOC定位": "⚡ ENERGY", "NTPC": "⚡ ENERGY", "ONGC": "⚡ ENERGY", "POWERGRID": "⚡ ENERGY", "TATAPOWER": "⚡ ENERGY"
 }
 
-@st.cache_data(ttl=600)  # Caches results for 10 minutes to protect api traffic lanes
-def scan_markets_unblocked_tv():
+@st.cache_data(ttl=300) # Fast 5-minute tracking cache refresh layer
+def scan_markets_bulk_tv():
     scanned_data = []
-    
-    # Progress UI anchors
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    total_tickers = len(FO_TICKERS)
-    
-    for index, ticker in enumerate(FO_TICKERS):
-        try:
-            status_text.text(f"Syncing Live Core Lines: {ticker} ({index + 1}/{total_tickers})...")
-            progress_bar.progress((index + 1) / total_tickers)
-            
-            # Fetch base raw indicators profile natively without fragile custom variables
-            handler = TA_Handler(
-                symbol=ticker,
-                exchange="NSE",
-                screener="india",
-                interval=Interval.INTERVAL_1_DAY
-            )
-            analysis = handler.get_analysis()
-            indicators = analysis.indicators
-            
-            # Extract standard, core price matrix properties
-            current_price = float(indicators.get("close", 0.0))
-            day_change = float(indicators.get("change", 0.0))
-            open_price = float(indicators.get("open", 0.0))
-            high_price = float(indicators.get("high", 0.0))
-            low_price = float(indicators.get("low", 0.0))
-            
-            if current_price == 0.0:
+    try:
+        # One single high-speed bulk call fetching all technical metrics simultaneously
+        bulk_analysis = get_multiple_analysis(screener="india", exchange="NSE", symbols=FO_TICKERS, interval=Interval.INTERVAL_1_DAY)
+        
+        for full_symbol, analysis in bulk_analysis.items():
+            if not analysis:
                 continue
+            try:
+                ticker = full_symbol.split(":")[1]
+                indicators = analysis.indicators
                 
-            # Natively determine trailing moving parameters using session spreads 
-            # to guarantee execution even when custom structural tokens lock up.
-            simulated_base_ema = (open_price + high_price + low_price + current_price) / 4.0
-            deviation = ((current_price - simulated_base_ema) / simulated_base_ema) * 100
-            
-            # Since deviations settle tightly inside active daily ranges, 
-            # we format action indicators to flag outperforming developments cleanly
-            if deviation <= -1.5 or day_change <= -4.0:
-                action = "🔴 BUY"
-            elif deviation >= 1.5 or day_change >= 4.0:
-                action = "🟢 SELL"
-            else:
-                action = "⚪ HOLD"
+                current_price = float(indicators.get("close", 0.0))
+                current_ema20 = float(indicators.get("EMA20", 0.0))
+                day_change = float(indicators.get("change", 0.0))
+                rsi14 = float(indicators.get("RSI", 50.0)) # Pull native 14-period RSI
                 
-            scanned_data.append({
-                "Ticker": ticker.replace("_", "&"),
-                "Price (₹)": round(current_price, 2),
-                "EMA20 Benchmark (₹)": round(simulated_base_ema, 2),
-                "Deviation (%)": round(deviation, 2),
-                "Action": action,
-                "Change": day_change
-            })
-        except:
-            continue
-            
-    status_text.empty()
-    progress_bar.empty()
+                if current_price == 0.0 or current_ema20 == 0.0:
+                    continue
+                    
+                # Strict 10% core mathematical equation logic restored
+                deviation = ((current_price - current_ema20) / current_ema20) * 100
+                
+                # Enhanced Logic: Flag if strict 10% criteria matches RSI momentum safety
+                if deviation <= -10.0:
+                    action = "🔴 BUY" if rsi14 < 35 else "🔴 BUY (Weak RSI)"
+                elif deviation >= 10.0:
+                    action = "🟢 SELL" if rsi14 > 65 else "🟢 SELL (Weak RSI)"
+                else:
+                    action = "⚪ HOLD"
+                    
+                scanned_data.append({
+                    "Ticker": ticker.replace("_", "&"),
+                    "Price (₹)": round(current_price, 2),
+                    "EMA20 (₹)": round(current_ema20, 2),
+                    "Deviation (%)": round(deviation, 2),
+                    "RSI (14)": round(rsi14, 1),
+                    "Action": action,
+                    "Change": day_change
+                })
+            except:
+                continue
+    except Exception as e:
+        st.error(f"Bulk data pipe error: {str(e)}")
+        
     return pd.DataFrame(scanned_data)
 
-# One-click manual refresh button
+# Refresh framework initialization panel button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Connecting to TradingView public data matrix..."):
-    results_df = scan_markets_unblocked_tv()
+with st.spinner("Executing high-speed institutional indicators tracking streams..."):
+    results_df = scan_markets_bulk_tv()
 
 if not results_df.empty:
-    # Sort entire master list by absolute largest deviation right away
+    # Sort absolute deviations largest to smallest
     all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     
-    # Isolate active buy and sell signal matches cleanly for the side buckets
-    buy_signals_df = all_sorted[all_sorted["Action"] == "🔴 BUY"][["Ticker", "Price (₹)", "Deviation (%)"]]
-    sell_signals_df = all_sorted[all_sorted["Action"] == "🟢 SELL"][["Ticker", "Price (₹)", "Deviation (%)"]]
+    # Isolate targets that fulfill the exact strict 10% boundary requirements
+    buy_signals_df = all_sorted[all_sorted["Deviation (%)"] <= -10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
+    sell_signals_df = all_sorted[all_sorted["Deviation (%)"] >= 10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
 
-    # Calculate the Sectoral Index change using data we already downloaded natively
+    # Natively summarize the Sector Index values
     all_sorted["Sector"] = all_sorted["Ticker"].map(TICKER_SECTORS)
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean()
     sector_summary = sector_summary.dropna().sort_values(by="Change", ascending=False)
 
-    # Prepare master list table view
-    display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 Benchmark (₹)", "Deviation (%)", "Action"]]
+    # Master frame view configuration data
+    display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # --- 📊 FOUR-COLUMN EXTENSIVE DESIGN LAYOUT ---
-    col_master, col_buy, col_sell, col_sectors = st.columns([0.50, 0.16, 0.16, 0.18])
+    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
+    col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
-    # Column 1: Master Full F&O Tracker (Left Side)
     with col_master:
         st.subheader("🔍 Complete F&O Watchlist")
         st.dataframe(display_master_df, use_container_width=True, hide_index=True)
 
-    # Column 2: Buy Side Box Panel (Middle Left)
     with col_buy:
-        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks</div>", unsafe_allow_html=True)
+        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         if not buy_signals_df.empty:
             st.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No stocks meet current buy baseline criteria.")
+            st.info("No stocks meet strict -10% buy deviation.")
 
-    # Column 3: Sell Side Box Panel (Middle Right)
     with col_sell:
-        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks</div>", unsafe_allow_html=True)
+        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         if not sell_signals_df.empty:
             st.dataframe(sell_signals_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No stocks meet current sell baseline criteria.")
+            st.info("No stocks meet strict +10% sell deviation.")
 
-    # Column 4: Dedicated Sector Performance Panel (Far Right Side)
     with col_sectors:
         st.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Render the natively computed sectors inside the right-hand container box
         for _, row in sector_summary.iterrows():
             name = row["Sector"]
             change = round(row["Change"], 2)
-            
-            # Apply color templates
             color = "#29b5e8" if change >= 0 else "#ff4b4b"
             sign = "+" if change >= 0 else ""
             
@@ -175,4 +154,4 @@ if not results_df.empty:
                 unsafe_allow_html=True
             )
 else:
-    st.error("Connection window full. Try clicking 'Refresh Scanner Data' to clear data cache lanes.")
+    st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")

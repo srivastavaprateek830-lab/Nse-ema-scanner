@@ -132,27 +132,25 @@ if not results_df.empty:
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
     # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
+    # Flat design: Columns are created here and populated directly, avoiding 'with' indentation entirely
     col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
-    with col_master:
-        st.subheader("🔍 Complete F&O Watchlist")
-        selected_row = st.dataframe(
-            display_master_df, 
-            use_container_width=True, 
-            hide_index=True,
-            on_select="rerun",
-            selection_mode="single-row"
-        )
+    col_master.subheader("🔍 Complete F&O Watchlist")
+    selected_row = col_master.dataframe(
+        display_master_df, 
+        use_container_width=True, 
+        hide_index=True,
+        on_select="rerun",
+        selection_mode="single-row"
+    )
 
-    with col_buy:
-        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        if not buy_signals_df.empty:
-            st.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No stocks meet strict -10% buy deviation.")
+    col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
+    col_buy.markdown("<br>", unsafe_allow_html=True)
+    if not buy_signals_df.empty:
+        col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
+    else:
+        col_buy.info("No stocks meet strict -10% buy deviation.")
 
-    with col_sell:
-        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        if not sell_signals_df.empty:
+    col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
+    col_sell.markdown("<br>", unsafe_allow_html=True)
+    if not sell_signals_df.empty:

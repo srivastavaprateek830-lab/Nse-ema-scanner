@@ -60,7 +60,7 @@ def scan_markets_bulk_tv():
             if not analysis:
                 continue
             try:
-                ticker = full_symbol.split(":")[1]
+                ticker = full_symbol.split(":")
                 indicators = analysis.indicators
                 current_price = float(indicators.get("close", 0.0))
                 current_ema20 = float(indicators.get("EMA20", 0.0))
@@ -76,7 +76,7 @@ def scan_markets_bulk_tv():
                 else:
                     action = "⚪ HOLD"
                 scanned_data.append({
-                    "Ticker": ticker.replace("_", "&"),
+                    "Ticker": ticker[1].replace("_", "&"),
                     "Price (₹)": round(current_price, 2),
                     "EMA20 (₹)": round(current_ema20, 2),
                     "Deviation (%)": round(deviation, 2),
@@ -136,7 +136,6 @@ if not results_df.empty:
 
     with col_master:
         st.subheader("🔍 Complete F&O Watchlist")
-        # Interactive selection row configuration enabled
         selected_row = st.dataframe(
             display_master_df, 
             use_container_width=True, 

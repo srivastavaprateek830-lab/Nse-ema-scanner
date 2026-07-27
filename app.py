@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from tradingview_ta import get_multiple_analysis, Interval
+from tradingview_ta import get_multiple_analysis, TA_Handler, Interval
 
 # Page setup configuration
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
@@ -23,7 +23,7 @@ FO_TICKERS = [
     "NSE:NATIONALUM", "NSE:NAUKRI", "NSE:NESTLEIND", "NSE:NMDC", "NSE:NTPC", "NSE:ONGC", 
     "NSE:PERSISTENT", "NSE:PFC", "NSE:PIDILITIND", "NSE:PNB", "NSE:POLYCAB", "NSE:POWERGRID", 
     "NSE:REC", "NSE:RELIANCE", "NSE:SAIL", "NSE:SBICARD", "NSE:SBILIFE", "NSE:SBIN", 
-    "NSE:SHRIRAMFIN", "NSE:SIEMENS", "NSE:SRF", "NSE:SUNPHARMA", "NSE:TATACHEMICAL", 
+    "SHRIRAMFIN", "NSE:SIEMENS", "NSE:SRF", "NSE:SUNPHARMA", "NSE:TATACHEMICAL", 
     "NSE:TATACOMM", "NSE:TATACONSUM", "NSE:TATAMOTORS", "NSE:TATAPOWER", "NSE:TATASTEEL", 
     "NSE:TCS", "NSE:TECHM", "NSE:TITAN", "NSE:TORNTPHARM", "NSE:TRENT", "NSE:TVSMOTOR", 
     "NSE:ULTRACEMCO", "NSE:UPL", "NSE:VEDL", "NSE:VOLTAS", "NSE:WIPRO", "NSE:ZEEL"
@@ -31,21 +31,30 @@ FO_TICKERS = [
 
 # Sector Mapping Lookup table to calculate performance values natively
 TICKER_SECTORS = {
-    "AXISBANK": "🏦 BANKING", "BANKBARODA": "🏦 BANKING", "CANBK": "🏦 BANKING", "HDFCBANK": "🏦 BANKING", "ICICIBANK": "🏦 BANKING", "KOTAKBANK": "🏦 BANKING", "PNB": "🏦 BANKING", "SBIN": "🏦 BANKING",
-    "COFORGE": "💻 IT SECTOR", "HCLTECH": "💻 IT SECTOR", "INFY": "💻 IT SECTOR", "LTIM": "💻 IT SECTOR", "PERSISTENT": "💻 IT SECTOR", "TCS": "💻 IT SECTOR", "TECHM": "💻 IT SECTOR", "WIPRO": "💻 IT SECTOR",
-    "BAJAJ_AUTO": "🚗 AUTO", "EICHERMOT": "🚗 AUTO", "HEROMOTOCO": "🚗 AUTO", "M_M": "🚗 AUTO", "MARUTI": "🚗 AUTO", "TATAMOTORS": "🚗 AUTO", "TVSMOTOR": "🚗 AUTO",
-    "CIPLA": "💊 PHARMA", "DIVISLAB": "💊 PHARMA", "DRREDDY": "💊 PHARMA", "GLENMARK": "💊 PHARMA", "LUPIN": "💊 PHARMA", "SUNPHARMA": "💊 PHARMA", "TORNTPHARM": "💊 PHARMA",
-    "BRITANNIA": "🛒 FMCG", "DABUR": "🛒 FMCG", "HINDUNILVR": "🛒 FMCG", "ITC": "🛒 FMCG", "NESTLEIND": "🛒 FMCG", "TATACONSUM": "🛒 FMCG",
-    "HINDALCO": "🏗️ METALS", "JINDALSTEL": "🏗️ METALS", "JSWSTEEL": "🏗️ METALS", "NATIONALUM": "🏗️ METALS", "SAIL": "🏗️ METALS", "TATASTEEL": "🏗️ METALS", "VEDL": "🏗️ METALS",
-    "DLF": "🏢 REALTY", "GODREJPROP": "🏢 REALTY", "OBEROIRLTY": "🏢 REALTY",
-    "ADANIPORTS": "⚡ ENERGY", "BPCL": "⚡ ENERGY", "COALINDIA": "⚡ ENERGY", "GAIL": "⚡ ENERGY", "HINDPETRO": "⚡ ENERGY", "IOC": "⚡ ENERGY", "NTPC": "⚡ ENERGY", "ONGC": "⚡ ENERGY", "POWERGRID": "⚡ ENERGY", "TATAPOWER": "⚡ ENERGY"
+    "ACC": "🏗️ MATERIALS", "AARTIIND": "💊 PHARMA", "ABB": "🏗️ MATERIALS", "ADANIENT": "⚡ ENERGY", "ADANIPORTS": "⚡ ENERGY", "APOLLOHOSP": "💊 PHARMA",
+    "ASIANPAINT": "🛒 FMCG", "AXISBANK": "🏦 BANKING", "BAJAJ_AUTO": "🚗 AUTO", "BAJFINANCE": "🏦 BANKING", "BAJAJFINSV": "🏦 BANKING",
+    "BANKBARODA": "🏦 BANKING", "BEL": "💻 IT SECTOR", "BHARATFORG": "🚗 AUTO", "BHARTIARTL": "💻 IT SECTOR", "BHEL": "⚡ ENERGY", "BPCL": "⚡ ENERGY",
+    "BRITANNIA": "🛒 FMCG", "CANBK": "🏦 BANKING", "CIPLA": "💊 PHARMA", "COALINDIA": "⚡ ENERGY", "COFORGE": "💻 IT SECTOR", "CONCOR": "⚡ ENERGY",
+    "DABUR": "🛒 FMCG", "DIVISLAB": "💊 PHARMA", "DIXON": "💻 IT SECTOR", "DLF": "🏢 REALTY", "DRREDDY": "💊 PHARMA", "EICHERMOT": "🚗 AUTO",
+    "GAIL": "⚡ ENERGY", "GLENMARK": "💊 PHARMA", "GODREJCP": "🛒 FMCG", "GODREJPROP": "🏢 REALTY", "GRASIM": "🏗️ MATERIALS", "HAL": "🏗️ MATERIALS",
+    "HAVELLS": "🏗️ MATERIALS", "HCLTECH": "💻 IT SECTOR", "HDFCBANK": "🏦 BANKING", "HDFCLIFE": "🏦 BANKING", "HEROMOTOCO": "🚗 AUTO",
+    "HINDALCO": "🏗️ METALS", "HINDUNILVR": "🛒 FMCG", "ICICIBANK": "🏦 BANKING", "ICICIGI": "🏦 BANKING", "IDEA": "💻 IT SECTOR", "IGL": "⚡ ENERGY",
+    "INDHOTEL": "🛒 FMCG", "INDIGO": "🚗 AUTO", "INDUSINDBK": "🏦 BANKING", "INDUSTOWER": "💻 IT SECTOR", "INFY": "💻 IT SECTOR", "IOC": "⚡ ENERGY",
+    "IRCTC": "🛒 FMCG", "ITC": "🛒 FMCG", "JINDALSTEL": "🏗️ METALS", "JSWSTEEL": "🏗️ METALS", "KOTAKBANK": "🏦 BANKING", "LT": "🏗️ MATERIALS",
+    "LTIM": "💻 IT SECTOR", "LUPIN": "💊 PHARMA", "M_M": "🚗 AUTO", "MARICO": "🛒 FMCG", "MARUTI": "🚗 AUTO", "MCX": "🏦 BANKING", "MUTHOOTFIN": "🏦 BANKING",
+    "NATIONALUM": "🏗️ METALS", "NAUKRI": "💻 IT SECTOR", "NESTLEIND": "🛒 FMCG", "NMDC": "🏗️ METALS", "NTPC": "⚡ ENERGY", "ONGC": "⚡ ENERGY",
+    "PERSISTENT": "💻 IT SECTOR", "PFC": "🏦 BANKING", "PIDILITIND": "🛒 FMCG", "PNB": "🏦 BANKING", "POLYCAB": "🏗️ MATERIALS", "POWERGRID": "⚡ ENERGY",
+    "REC": "🏦 BANKING", "RELIANCE": "⚡ ENERGY", "SAIL": "🏗️ METALS", "SBICARD": "🏦 BANKING", "SBILIFE": "🏦 BANKING", "SBIN": "🏦 BANKING",
+    "SHRIRAMFIN": "🏦 BANKING", "SIEMENS": "🏗️ MATERIALS", "SRF": "🏗️ MATERIALS", "SUNPHARMA": "💊 PHARMA", "TATACHEMICAL": "🏗️ MATERIALS",
+    "TATACOMM": "💻 IT SECTOR", "TATACONSUM": "🛒 FMCG", "TATAMOTORS": "🚗 AUTO", "TATAPOWER": "⚡ ENERGY", "TATASTEEL": "🏗️ METALS",
+    "TCS": "💻 IT SECTOR", "TECHM": "💻 IT SECTOR", "TITAN": "🛒 FMCG", "TORNTPHARM": "💊 PHARMA", "TRENT": "🛒 FMCG", "TVSMOTOR": "🚗 AUTO",
+    "ULTRACEMCO": "🏗️ MATERIALS", "UPL": "🏗️ MATERIALS", "VEDL": "🏗️ METALS", "VOLTAS": "🏗️ MATERIALS", "WIPRO": "💻 IT SECTOR", "ZEEL": "🛒 FMCG"
 }
 
 @st.cache_data(ttl=300) # Fast 5-minute tracking cache refresh layer
 def scan_markets_bulk_tv():
     scanned_data = []
     try:
-        # Corrected: Removed invalid 'exchange' argument to fix the runtime crash
         bulk_analysis = get_multiple_analysis(screener="india", symbols=FO_TICKERS, interval=Interval.INTERVAL_1_DAY)
         
         for full_symbol, analysis in bulk_analysis.items():
@@ -58,19 +67,17 @@ def scan_markets_bulk_tv():
                 current_price = float(indicators.get("close", 0.0))
                 current_ema20 = float(indicators.get("EMA20", 0.0))
                 day_change = float(indicators.get("change", 0.0))
-                rsi14 = float(indicators.get("RSI", 50.0)) # Pull native 14-period RSI
+                rsi14 = float(indicators.get("RSI", 50.0))
                 
                 if current_price == 0.0 or current_ema20 == 0.0:
                     continue
                     
-                # Strict 10% core mathematical equation logic restored
                 deviation = ((current_price - current_ema20) / current_ema20) * 100
                 
-                # Enhanced Logic: Flag if strict 10% criteria matches RSI momentum safety
                 if deviation <= -10.0:
                     action = "🔴 BUY" if rsi14 < 35 else "🔴 BUY (Weak RSI)"
                 elif deviation >= 10.0:
-                    action = "🟢 SELL" if rsi14 > 65 else "🟢 SELL (Weak RSI)"
+                    action = "🟢 SELL " if rsi14 > 65 else "🟢 SELL (Weak RSI)"
                 else:
                     action = "⚪ HOLD"
                     
@@ -89,6 +96,53 @@ def scan_markets_bulk_tv():
         st.error(f"Bulk data pipe error: {str(e)}")
         
     return pd.DataFrame(scanned_data)
+
+def get_supertrend_timeframes(ticker_clean):
+    """Helper to query multi-timeframe SuperTrend parameters via TradingView scripts."""
+    timeframes = {
+        "📊 Weekly Trend": Interval.INTERVAL_1_WEEK,
+        "📅 Daily Trend": Interval.INTERVAL_1_DAY,
+        "⏱️ 1 Hour Trend": Interval.INTERVAL_1_HOUR,
+        "⚡ 15 Min Trend": Interval.INTERVAL_15_MIN
+    }
+    st_results = {}
+    
+    # Adapt naming scheme back to query layouts safely
+    query_ticker = ticker_clean.replace("&", "_")
+    
+    for label, tf in timeframes.items():
+        try:
+            handler = TA_Handler(
+                symbol=query_ticker,
+                exchange="NSE",
+                screener="india",
+                interval=tf
+            )
+            analysis = handler.get_analysis()
+            
+            # TradingView bundles generic SuperTrend under structural indicator nodes: 
+            # 'Supertrend.upper' or 'Supertrend.lower'. If lower exists, price is above it (Bullish).
+            st_lower = analysis.indicators.get("Supertrend.lower")
+            st_upper = analysis.indicators.get("Supertrend.upper")
+            close_val = analysis.indicators.get("close")
+            
+            if st_lower is not None and close_val >= st_lower:
+                st_results[label] = "🟢 BULLISH (BUY)"
+            elif st_upper is not None and close_val <= st_upper:
+                st_results[label] = "🔴 BEARISH (SELL)"
+            else:
+                # Fallback check using TradingView's summary consensus if specific arrays lock up
+                summary = analysis.summary.get("RECOMMENDATION", "")
+                if "BUY" in summary:
+                    st_results[label] = "🟢 BULLISH (BUY)"
+                elif "SELL" in summary:
+                    st_results[label] = "🔴 BEARISH (SELL)"
+                else:
+                    st_results[label] = "⚪ NEUTRAL"
+        except:
+            st_results[label] = "⚠️ DATA LOCKED"
+            
+    return st_results
 
 # Refresh framework initialization panel button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
@@ -113,45 +167,3 @@ if not results_df.empty:
     # Master frame view configuration data
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
-    col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
-
-    with col_master:
-        st.subheader("🔍 Complete F&O Watchlist")
-        st.dataframe(display_master_df, use_container_width=True, hide_index=True)
-
-    with col_buy:
-        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        if not buy_signals_df.empty:
-            st.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No stocks meet strict -10% buy deviation.")
-
-    with col_sell:
-        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        if not sell_signals_df.empty:
-            st.dataframe(sell_signals_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("No stocks meet strict +10% sell deviation.")
-
-    with col_sectors:
-        st.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        
-        for _, row in sector_summary.iterrows():
-            name = row["Sector"]
-            change = round(row["Change"], 2)
-            color = "#29b5e8" if change >= 0 else "#ff4b4b"
-            sign = "+" if change >= 0 else ""
-            
-            st.markdown(
-                f"<div style='padding: 8px; margin-bottom: 6px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px; background-color: rgba(255,255,255,0.01);'>"
-                f"<span style='font-size: 13px; font-weight: 500;'>{name}</span>"
-                f"<span style='float: right; font-weight: bold; color: {color};'>{sign}{change}%</span>"
-                f"</div>", 
-                unsafe_allow_html=True
-            )
-else:
-    st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")

@@ -50,7 +50,7 @@ def scan_markets():
     for ticker in FO_TICKERS:
         try:
             # Extract ticker specific dataframe safely
-            df = data[ticker].dropna() if ticker in data.columns.levels[0] else pd.DataFrame()
+            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
             if df.empty or len(df) < 20:
                 continue
                 
@@ -93,37 +93,61 @@ with st.spinner("Scanning NSE F&O segment... This takes a few seconds."):
     results_df = scan_markets()
 
 if not results_df.empty:
-    # Filter for signals matching your criteria
-    filtered_df = results_df[results_df["Deviation (%)"].abs() >= 10]
+    # Sort entire dataset by highest absolute deviation
+    all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     
-    # Sort by the absolute largest deviation
-    filtered_df = filtered_df.reindex(filtered_df["Deviation (%)"].abs().sort_values(ascending=False).index)
+    # Filter specific signal sub-categories
+    buy_signals_df = all_sorted[all_sorted["Deviation (%)"] <= -10][["Ticker", "Price (₹)", "Deviation (%)"]]
+    sell_signals_df = all_sorted[all_sorted["Deviation (%)"] >= 10][["Ticker", "Price (₹)", "Deviation (%)"]]
+
+    # --- INTERACTIVE VISUAL CHART POPUP ---
+    st.markdown("### 📊 Live Trend Viewer")
+    selected_ticker = st.selectbox("🎯 Click here to select any stock and view its instant EMA trend chart:", sorted(all_sorted["Ticker"].unique()))
     
-    # Display Key Statistics Cards
-    buy_count = len(filtered_df[filtered_df["Deviation (%)"] <= -10])
-    sell_count = len(filtered_df[filtered_df["Deviation (%)"] >= 10])
-    
-    col1, col2 = st.columns(2)
-    col1.metric("Total BUY Signals (< -10%)", buy_count)
-    col2.metric("Total SELL Signals (> +10%)", sell_count)
-    
-    st.subheader("🎯 Triggered Trading Signals")
-    if not filtered_df.empty:
-        st.dataframe(
-            filtered_df.style.map(
-                lambda val: 'background-color: #ffcccc; color: black;' if 'BUY' in str(val) 
-                else ('background-color: #ccffcc; color: black;' if 'SELL' in str(val) else ''),
-                subset=['Action']
-            ), 
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.info("No stocks currently show a deviation greater than 10% from the EMA20.")
-        
-    # Section to look at all stocks anyway
-    with st.expander("🔍 View Complete F&O Watchlist Deviation"):
-        all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
+    if selected_ticker:
+        # Pull historical pricing arrays directly to build an interactive line chart on user request
+        try:
+            ticker_ns = f"{selected_ticker}.NS"
+            chart_df = yf.download(ticker_ns, period="3mo", interval="1d", progress=False)
+            if not chart_df.empty:
+                chart_df['EMA20'] = chart_df['Close'].ewm(span=20, adjust=False).mean()
+                
+                # Format a combined interactive line series for Streamlit
+                plot_data = pd.DataFrame({
+                    'Price': chart_df['Close'],
+                    'EMA20 Line': chart_df['EMA20']
+                }, index=chart_df.index)
+                
+                st.line_chart(plot_data, y=["Price", "EMA20 Line"])
+        except Exception:
+            st.caption("Unable to draw live preview chart for this token right now.")
+
+    st.markdown("---")
+
+    # --- MAIN SPLIT CONTAINER LAYOUT ---
+    left_column, right_column = st.columns([3, 2]) # 60% Left for main table, 40% Right for Action Cards
+
+    with left_column:
+        st.subheader("🔍 Complete F&O Watchlist Deviation")
         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
+
+    with right_column:
+        st.subheader("🛒 Target Action Buckets")
+        
+        # Upper Container Box: Dynamic BUY Signal Router
+        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.1); padding: 12px; border-radius: 5px; border-left: 5px solid #ff4b4b;'><strong>🚨 Buy Stocks (&lt; -10% Deviation)</strong></div>", unsafe_allow_html=True)
+        if not buy_signals_df.empty:
+            st.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No stocks currently down past the -10% buy boundary.")
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Lower Container Box: Dynamic SELL Signal Router
+        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.1); padding: 12px; border-radius: 5px; border-left: 5px solid #29b5e8;'><strong>🚨 Sell Stocks (&gt; +10% Deviation)</strong></div>", unsafe_allow_html=True)
+        if not sell_signals_df.empty:
+            st.dataframe(sell_signals_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No stocks currently pumped past the +10% sell boundary.")
 else:
     st.error("Failed to retrieve market data. Try clicking the Refresh button above.")

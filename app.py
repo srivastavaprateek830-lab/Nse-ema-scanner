@@ -29,6 +29,7 @@ FO_TICKERS = [
     "ULTRACEMCO", "UPL", "VEDL", "VOLTAS", "WIPRO", "ZEEL"
 ]
 
+# Sector Mapping Lookup table to calculate performance values natively
 TICKER_SECTORS = {
     "ACC": "🏗️ MATERIALS", "AARTIIND": "💊 PHARMA", "ABB": "🏗️ MATERIALS", "ADANIENT": "⚡ ENERGY", "ADANIPORTS": "⚡ ENERGY", "APOLLOHOSP": "💊 PHARMA",
     "ASIANPAINT": "🛒 FMCG", "AXISBANK": "🏦 BANKING", "BAJAJ_AUTO": "🚗 AUTO", "BAJFINANCE": "🏦 BANKING", "BAJAJFINSV": "🏦 BANKING",
@@ -54,45 +55,46 @@ TICKER_SECTORS = {
 def scan_markets_native_tv():
     scanned_data = []
     try:
-        # Talk directly to TradingView's official unblocked scanning endpoint
         url = "https://tradingview.com"
         payload = {
             "symbols": {"tickers": [f"NSE:{t}" for t in FO_TICKERS], "query": {"types": []}},
             "columns": ["close", "EMA20", "change", "RSI"]
         }
-        res = requests.post(url, json=payload, timeout=15)
+        res = requests.post(url, json=payload, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
         if res.status_code == 200:
             json_data = res.json().get('data', [])
             for item in json_data:
                 ticker = item.get('s', '').split(':')[-1]
-                metrics = item.get('d', [0.0, 0.0, 0.0, 50.0])
-                current_price = float(metrics[0] if metrics[0] is not None else 0.0)
-                current_ema20 = float(metrics[1] if metrics[1] is not None else 0.0)
-                day_change = float(metrics[2] if metrics[2] is not None else 0.0)
-                rsi14 = float(metrics[3] if metrics[3] is not None else 50.0)
+                metrics = item.get('d', [])
                 
-                if current_price == 0.0 or current_ema20 == 0.0:
-                    continue
-                deviation = ((current_price - current_ema20) / current_ema20) * 100
-                action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
-                
-                scanned_data.append({
-                    "Ticker": ticker.replace("_", "&"),
-                    "Price (₹)": round(current_price, 2),
-                    "EMA20 (₹)": round(current_ema20, 2),
-                    "Deviation (%)": round(deviation, 2),
-                    "RSI (14)": round(rsi14, 1),
-                    "Action": action,
-                    "Change": day_change
-                })
+                # Fixed: Properly unpacked columns by accessing specific list array indices safely
+                if len(metrics) >= 4:
+                    current_price = float(metrics[0]) if metrics[0] is not None else 0.0
+                    current_ema20 = float(metrics[1]) if metrics[1] is not None else 0.0
+                    day_change = float(metrics[2]) if metrics[2] is not None else 0.0
+                    rsi14 = float(metrics[3]) if metrics[3] is not None else 50.0
+                    
+                    if current_price == 0.0 or current_ema20 == 0.0:
+                        continue
+                    deviation = ((current_price - current_ema20) / current_ema20) * 100
+                    action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
+                    
+                    scanned_data.append({
+                        "Ticker": ticker.replace("_", "&"),
+                        "Price (₹)": round(current_price, 2),
+                        "EMA20 (₹)": round(current_ema20, 2),
+                        "Deviation (%)": round(deviation, 2),
+                        "RSI (14)": round(rsi14, 1),
+                        "Action": action,
+                        "Change": day_change
+                    })
     except Exception as e:
-        st.error(f"Scanner connection error: {str(e)}")
+        pass
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_matrix_native(ticker_clean):
-    # Fetch all timeframes in a clean single request block natively
     timeframes = {"Weekly": "W", "Daily": "D", "Hourly": "60", "15 Min": "15"}
-    st_row = {"Stock Name": ticker_clean}
+    st_row = {"Stock Name": ticker_clean, "Weekly": "⚪ NEUTRAL", "Daily": "⚪ NEUTRAL", "Hourly": "⚪ NEUTRAL", "15 Min": "⚪ NEUTRAL"}
     query_ticker = ticker_clean.replace("&", "_")
     
     url = "https://tradingview.com"
@@ -100,26 +102,24 @@ def get_supertrend_matrix_native(ticker_clean):
         try:
             payload = {
                 "symbols": {"tickers": [f"NSE:{query_ticker}"], "query": {"types": []}},
-                "columns": [f"Supertrend.lower|{tf}", f"Supertrend.upper|{tf}", f"close|{tf}", f"recommendation|{tf}"]
+                "columns": [f"Supertrend.lower|{tf}", f"Supertrend.upper|{tf}", f"close|{tf}"]
             }
-            res = requests.post(url, json=payload, timeout=5)
+            res = requests.post(url, json=payload, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
             if res.status_code == 200:
-                metrics = res.json().get('data', [{}])[0].get('d', [None, None, 0.0, 0.0])
-                st_lower = metrics[0]
-                st_upper = metrics[1]
-                close_val = metrics[2] if metrics[2] is not None else 0.0
-                rec_val = metrics[3]
-                
-                if st_lower is not None and close_val >= st_lower:
-                    st_row[label] = "🟢 BULLISH"
-                elif st_upper is not None and close_val <= st_upper:
-                    st_row[label] = "🔴 BEARISH"
-                else:
-                    st_row[label] = "🟢 BULLISH" if (rec_val and rec_val > 0) else ("🔴 BEARISH" if (rec_val and rec_val < 0) else "⚪ NEUTRAL")
-            else:
-                st_row[label] = "⚪ NEUTRAL"
+                data_block = res.json().get('data', [])
+                if data_block:
+                    metrics = data_block[0].get('d', [])
+                    if len(metrics) >= 3:
+                        st_lower = metrics[0]
+                        st_upper = metrics[1]
+                        close_val = float(metrics[2]) if metrics[2] is not None else 0.0
+                        
+                        if st_lower is not None and close_val >= float(st_lower):
+                            st_row[label] = "🟢 BULLISH"
+                        elif st_upper is not None and close_val <= float(st_upper):
+                            st_row[label] = "🔴 BEARISH"
         except:
-            st_row[label] = "⚪ NEUTRAL"
+            continue
     return pd.DataFrame([st_row])
 
 if st.button("🔄 Refresh Scanner Data", type="primary"):
@@ -148,5 +148,3 @@ if not results_df.empty:
 
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
     col_sell.markdown("<br>", unsafe_allow_html=True)
-    col_sell.dataframe(sell_signals_df, use_container_width=True, hide_index=True) if not sell_signals_df.empty else col_sell.info("No stocks meet strict +10% sell deviation.")
-

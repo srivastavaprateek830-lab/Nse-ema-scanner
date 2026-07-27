@@ -70,9 +70,9 @@ def scan_markets_bulk_tv():
                     continue
                 deviation = ((current_price - current_ema20) / current_ema20) * 100
                 if deviation <= -10.0:
-                    action = "🔴 BUY" if rsi14 < 35 else "🔴 BUY (Weak RSI)"
+                    action = "🔴 BUY"
                 elif deviation >= 10.0:
-                    action = "🟢 SELL" if rsi14 > 65 else "🟢 SELL (Weak RSI)"
+                    action = "🟢 SELL"
                 else:
                     action = "⚪ HOLD"
                 scanned_data.append({
@@ -90,14 +90,14 @@ def scan_markets_bulk_tv():
         st.error(f"Bulk data pipe error: {str(e)}")
     return pd.DataFrame(scanned_data)
 
-def get_supertrend_timeframes(ticker_clean):
+def get_supertrend_row(ticker_clean):
     timeframes = {
-        "📊 Weekly Trend": Interval.INTERVAL_1_WEEK,
-        "📅 Daily Trend": Interval.INTERVAL_1_DAY,
-        "⏱️ 1 Hour Trend": Interval.INTERVAL_1_HOUR,
-        "⚡ 15 Min Trend": Interval.INTERVAL_15_MINUTES
+        "Weekly": Interval.INTERVAL_1_WEEK,
+        "Daily": Interval.INTERVAL_1_DAY,
+        "Hourly": Interval.INTERVAL_1_HOUR,
+        "15 Min": Interval.INTERVAL_15_MINUTES
     }
-    st_results = {}
+    st_row = {"Stock Name": ticker_clean}
     query_ticker = ticker_clean.replace("&", "_")
     for label, tf in timeframes.items():
         try:
@@ -107,25 +107,20 @@ def get_supertrend_timeframes(ticker_clean):
             st_upper = analysis.indicators.get("Supertrend.upper")
             close_val = analysis.indicators.get("close")
             if st_lower is not None and close_val >= st_lower:
-                st_results[label] = "🟢 BULLISH (BUY)"
+                st_row[label] = "🟢 BULLISH"
             elif st_upper is not None and close_val <= st_upper:
-                st_results[label] = "🔴 BEARISH (SELL)"
+                st_row[label] = "🔴 BEARISH"
             else:
                 summary = analysis.summary.get("RECOMMENDATION", "")
-                if "BUY" in summary:
-                    st_results[label] = "🟢 BULLISH (BUY)"
-                elif "SELL" in summary:
-                    st_results[label] = "🔴 BEARISH (SELL)"
-                else:
-                    st_results[label] = "⚪ NEUTRAL"
+                st_row[label] = "🟢 BULLISH" if "BUY" in summary else ("🔴 BEARISH" if "SELL" in summary else "⚪ NEUTRAL")
         except:
-            st_results[label] = "⚪ NEUTRAL"
-    return st_results
+            st_row[label] = "⚪ NEUTRAL"
+    return pd.DataFrame([st_row])
 
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Executing high-speed institutional indicators tracking streams..."):
+with st.spinner("Executing high-speed indicators tracking streams..."):
     results_df = scan_markets_bulk_tv()
 
 if not results_df.empty:
@@ -133,26 +128,32 @@ if not results_df.empty:
     buy_signals_df = all_sorted[all_sorted["Deviation (%)"] <= -10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
     sell_signals_df = all_sorted[all_sorted["Deviation (%)"] >= 10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
     all_sorted["Sector"] = all_sorted["Ticker"].map(TICKER_SECTORS)
-    sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean()
-    sector_summary = sector_summary.dropna().sort_values(by="Change", ascending=False)
+    sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean().dropna().sort_values(by="Change", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    st.markdown("---")
-    st.subheader("🎯 Live Multi-Timeframe SuperTrend Inspector")
-    selected_stock = st.selectbox("Click here to select a stock to check its real-time multi-timeframe trend confluence:", sorted(all_sorted["Ticker"].unique()))
+    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
+    col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
-    if selected_stock:
-        with st.spinner(f"Analyzing multi-timeframe charts for {selected_stock}..."):
-            st_trends = get_supertrend_timeframes(selected_stock)
-        st_cols = st.columns(len(st_trends))
-        for idx, (tf_name, trend_status) in enumerate(st_trends.items()):
-            with st_cols[idx]:
-                if "BULLISH" in trend_status:
-                    bg_color = "rgba(41, 181, 232, 0.12)"
-                    border_color = "#29b5e8"
-                elif "BEARISH" in trend_status:
-                    bg_color = "rgba(255, 75, 75, 0.12)"
-                    border_color = "#ff4b4b"
-                else:
-                    bg_color = "rgba(255, 255, 255, 0.05)"
-                    border_color = "#777777"
+    with col_master:
+        st.subheader("🔍 Complete F&O Watchlist")
+        # Interactive selection row configuration enabled
+        selected_row = st.dataframe(
+            display_master_df, 
+            use_container_width=True, 
+            hide_index=True,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+
+    with col_buy:
+        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        if not buy_signals_df.empty:
+            st.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("No stocks meet strict -10% buy deviation.")
+
+    with col_sell:
+        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        if not sell_signals_df.empty:

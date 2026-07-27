@@ -1,107 +1,105 @@
 import streamlit as st
+import yfinance as yf
 import pandas as pd
 import requests
+
+# Fix for Yahoo Finance cache location on Streamlit servers
+yf.set_tz_cache_location("/tmp/yf_cache")
 
 # Set up page configuration
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
 st.title("📈 NSE F&O EMA20 Deviation Scanner")
-st.write("Scans major NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
+st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
 
-# Curated list of high-liquidity NSE F&O Tickers
+# List of 100+ prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
 FO_TICKERS = [
-    "ACC", "AARTIIND", "ABB", "ADANIENT", "ADANIPORTS", "APOLLOHOSP", 
-    "ASIANPAINT", "AXISBANK", "BAJAJ-AUTO", "BAJFINANCE", "BAJAJFINSV", 
-    "BANKBARODA", "BEL", "BHARATFORG", "BHARTIARTL", "BHEL", "BPCL", 
-    "BRITANNIA", "CANBK", "CIPLA", "COALINDIA", "COFORGE", "CONCOR", 
-    "DABUR", "DIVISLAB", "DIXON", "DLF", "DRREDDY", "EICHERMOT", 
-    "GAIL", "GLENMARK", "GODREJCP", "GODREJPROP", "GRASIM", "HAL", 
-    "HAVELLS", "HCLTECH", "HDFCBANK", "HDFCLIFE", "HEROMOTOCO", 
-    "HINDALCO", "HINDUNILVR", "ICICIBANK", "ICICIGI", "IDEA", "IGL", 
-    "INDHOTEL", "INDIGO", "INDUSINDBK", "INDUSTOWER", "INFY", "IOC", 
-    "IRCTC", "ITC", "JINDALSTEL", "JSWSTEEL", "KOTAKBANK", "LT", 
-    "LTIM", "LUPIN", "M&M", "MARICO", "MARUTI", "MCX", "MUTHOOTFIN", 
-    "NATIONALUM", "NAUKRI", "NESTLEIND", "NMDC", "NTPC", "ONGC", 
-    "PERSISTENT", "PFC", "PIDILITIND", "PNB", "POLYCAB", "POWERGRID", 
-    "REC", "RELIANCE", "SAIL", "SBICARD", "SBILIFE", "SBIN", 
-    "SHRIRAMFIN", "SIEMENS", "SRF", "SUNPHARMA", "TATACHEMICAL", 
-    "TATACOMM", "TATACONSUM", "TATAMOTORS", "TATAPOWER", "TATASTEEL", 
-    "TCS", "TECHM", "TITAN", "TORNTPHARM", "TRENT", "TVSMOTOR", 
-    "ULTRACEMCO", "UPL", "VEDL", "VOLTAS", "WIPRO", "ZEEL"
+    "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
+    "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
+    "BANKBARODA.NS", "BEL.NS", "BHARATFORG.NS", "BHARTIARTL.NS", "BHEL.NS", "BPCL.NS", 
+    "BRITANNIA.NS", "CANBK.NS", "CIPLA.NS", "COALINDIA.NS", "COFORGE.NS", "CONCOR.NS", 
+    "DABUR.NS", "DIVISLAB.NS", "DIXON.NS", "DLF.NS", "DRREDDY.NS", "EICHERMOT.NS", 
+    "GAIL.NS", "GLENMARK.NS", "GODREJCP.NS", "GODREJPROP.NS", "GRASIM.NS", "HAL.NS", 
+    "HAVELLS.NS", "HCLTECH.NS", "HDFCBANK.NS", "HDFCLIFE.NS", "HEROMOTOCO.NS", 
+    "HINDALCO.NS", "HINDUNILVR.NS", "ICICIBANK.NS", "ICICIGI.NS", "IDEA.NS", "IGL.NS", 
+    "INDHOTEL.NS", "INDIGO.NS", "INDUSINDBK.NS", "INDUSTOWER.NS", "INFY.NS", "IOC.NS", 
+    "IRCTC.NS", "ITC.NS", "JINDALSTEL.NS", "JSWSTEEL.NS", "KOTAKBANK.NS", "LT.NS", 
+    "LTIM.NS", "LUPIN.NS", "M&M.NS", "MARICO.NS", "MARUTI.NS", "MCX.NS", "MUTHOOTFIN.NS", 
+    "NATIONALUM.NS", "NAUKRI.NS", "NESTLEIND.NS", "NMDC.NS", "NTPC.NS", "ONGC.NS", 
+    "PERSISTENT.NS", "PFC.NS", "PIDILITIND.NS", "PNB.NS", "POLYCAB.NS", "POWERGRID.NS", 
+    "REC.NS", "RELIANCE.NS", "SAIL.NS", "SBICARD.NS", "SBILIFE.NS", "SBIN.NS", 
+    "SHRIRAMFIN.NS", "SIEMENS.NS", "SRF.NS", "SUNPHARMA.NS", "TATACHEMICAL.NS", 
+    "TATACOMM.NS", "TATACONSUM.NS", "TATAMOTORS.NS", "TATAPOWER.NS", "TATASTEEL.NS", 
+    "TCS.NS", "TECHM.NS", "TITAN.NS", "TORNTPHARM.NS", "TRENT.NS", "TVSMOTOR.NS", 
+    "ULTRACEMCO.NS", "UPL.NS", "VEDL.NS", "VOLTAS.NS", "WIPRO.NS", "ZEEL.NS"
 ]
 
-@st.cache_data(ttl=600)  # Cache data for 10 minutes
+@st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain speed
 def scan_markets():
     scanned_data = []
     
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    total_tickers = len(FO_TICKERS)
+    # Formulate a clean browser session to keep yfinance downloads running smooth
+    session = requests.Session()
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    })
     
-    # Utilizing an unthrottled Public Trading API Hub Gateway
-    for index, ticker in enumerate(FO_TICKERS):
+    # Download data in bulk using the corrected '3mo' duration value
+    tickers_str = " ".join(FO_TICKERS)
+    data = yf.download(tickers_str, period="3mo", interval="1d", group_by="ticker", progress=False, session=session)
+    
+    for ticker in FO_TICKERS:
         try:
-            status_text.text(f"Fetching {ticker} via Proxy Route ({index + 1}/{total_tickers})...")
-            progress_bar.progress((index + 1) / total_tickers)
+            # Extract ticker specific dataframe safely
+            df = data[ticker].dropna() if ticker in data.columns.levels[0] else pd.DataFrame()
+            if df.empty or len(df) < 20:
+                continue
+                
+            # Calculate EMA20
+            close_prices = df['Close']
+            ema20 = close_prices.ewm(span=20, adjust=False).mean()
             
-            # Using an unblocked public institutional proxy that feeds chart data natively
-            url = f"https://yahoo.com{ticker}.NS?range=3mo&interval=1d"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-            }
+            # Get latest values
+            current_price = float(close_prices.iloc[-1])
+            current_ema20 = float(ema20.iloc[-1])
             
-            res = requests.get(url, headers=headers, timeout=10)
-            if res.status_code == 200:
-                json_data = res.json()
-                result = json_data.get('chart', {}).get('result', [])
-                if result:
-                    # Target close metrics array directly 
-                    close_prices = result[0].get('indicators', {}).get('quote', [{}])[0].get('close', [])
-                    # Clean out occasional null/NaN entries from raw feed
-                    clean_closes = [c for c in close_prices if c is not None]
-                    
-                    if len(clean_closes) >= 20:
-                        df_close = pd.Series(clean_closes)
-                        
-                        # Calculate accurate EMA20
-                        ema20_series = df_close.ewm(span=20, adjust=False).mean()
-                        
-                        current_price = float(df_close.iloc[-1])
-                        current_ema20 = float(ema20_series.iloc[-1])
-                        deviation = ((current_price - current_ema20) / current_ema20) * 100
-                        
-                        if deviation <= -10:
-                            action = "🔴 BUY (Undervalued)"
-                        elif deviation >= 10:
-                            action = "🟢 SELL (Overvalued)"
-                        else:
-                            action = "⚪ HOLD / NEUTRAL"
-                            
-                        scanned_data.append({
-                            "Ticker": ticker,
-                            "Price (₹)": round(current_price, 2),
-                            "EMA20 (₹)": round(current_ema20, 2),
-                            "Deviation (%)": round(deviation, 2),
-                            "Action": action
-                        })
+            # Calculate percentage deviation
+            deviation = ((current_price - current_ema20) / current_ema20) * 100
+            
+            # Determine Action Signal
+            if deviation <= -10:
+                action = "🔴 BUY (Undervalued)"
+            elif deviation >= 10:
+                action = "🟢 SELL (Overvalued)"
+            else:
+                action = "⚪ HOLD / NEUTRAL"
+                
+            scanned_data.append({
+                "Ticker": ticker.replace(".NS", ""),
+                "Price (₹)": round(current_price, 2),
+                "EMA20 (₹)": round(current_ema20, 2),
+                "Deviation (%)": round(deviation, 2),
+                "Action": action
+            })
         except Exception:
             continue
             
-    status_text.empty()
-    progress_bar.empty()
     return pd.DataFrame(scanned_data)
 
-# Manual data refresh button
+# One-click manual refresh button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Streaming secure institutional metrics... Please wait."):
+with st.spinner("Scanning NSE F&O segment... This takes a few seconds."):
     results_df = scan_markets()
 
 if not results_df.empty:
     # Filter for signals matching your criteria
     filtered_df = results_df[results_df["Deviation (%)"].abs() >= 10]
+    
+    # Sort by the absolute largest deviation
     filtered_df = filtered_df.reindex(filtered_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     
+    # Display Key Statistics Cards
     buy_count = len(filtered_df[filtered_df["Deviation (%)"] <= -10])
     sell_count = len(filtered_df[filtered_df["Deviation (%)"] >= 10])
     
@@ -121,10 +119,11 @@ if not results_df.empty:
             hide_index=True
         )
     else:
-        st.info("No F&O stocks currently show a deviation greater than 10% from the EMA20.")
+        st.info("No stocks currently show a deviation greater than 10% from the EMA20.")
         
+    # Section to look at all stocks anyway
     with st.expander("🔍 View Complete F&O Watchlist Deviation"):
         all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
 else:
-    st.error("Connection window full. Try clicking 'Refresh Scanner Data' to clear data cache lanes.")
+    st.error("Failed to retrieve market data. Try clicking the Refresh button above.")

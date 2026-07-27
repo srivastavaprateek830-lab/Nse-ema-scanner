@@ -50,7 +50,7 @@ def scan_markets():
     for ticker in FO_TICKERS:
         try:
             # Extract ticker specific dataframe safely
-            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
+            df = data[ticker].dropna() if ticker in data.columns.levels[0] else pd.DataFrame()
             if df.empty or len(df) < 20:
                 continue
                 
@@ -100,42 +100,13 @@ if not results_df.empty:
     buy_signals_df = all_sorted[all_sorted["Deviation (%)"] <= -10][["Ticker", "Price (₹)", "Deviation (%)"]]
     sell_signals_df = all_sorted[all_sorted["Deviation (%)"] >= 10][["Ticker", "Price (₹)", "Deviation (%)"]]
 
-    # --- 📈 DYNAMIC TREND VIEWER PANEL ---
-    st.markdown("### 📈 Interactive Trend Visualizer")
-    selected_ticker = st.selectbox("🎯 Click below to select any stock ticker and view its price vs EMA20 chart line:", sorted(all_sorted["Ticker"].unique()))
-    
-    if selected_ticker:
-        try:
-            # Create the exact same proxy session to fetch single stock chart safely
-            chart_session = requests.Session()
-            chart_session.headers.update({
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            })
-            
-            ticker_ns = f"{selected_ticker}.NS"
-            chart_df = yf.download(ticker_ns, period="3mo", interval="1d", progress=False, session=chart_session)
-            if not chart_df.empty:
-                chart_df['EMA20 Line'] = chart_df['Close'].ewm(span=20, adjust=False).mean()
-                
-                # Bundle series for line rendering
-                plot_data = pd.DataFrame({
-                    'Market Price': chart_df['Close'],
-                    'EMA20 Baseline': chart_df['EMA20 Line']
-                }, index=chart_df.index)
-                
-                st.line_chart(plot_data, y=["Market Price", "EMA20 Baseline"])
-        except Exception:
-            st.caption("Unable to draw live preview chart for this token right now.")
-
-    st.markdown("---")
-
     # --- 📊 THREE-COLUMN DISPLAY LAYOUT ---
     # Layout splits view screen room dynamically: 50% Master List, 25% Buy box, 25% Sell box
     left_col, mid_col, right_col = st.columns([0.5, 0.25, 0.25])
 
     # Column Workspace A: Master Watchlist
     with left_col:
-        st.subheader("🔍 Complete F&O Watchlist Deviation")
+        st.subheader("🔍 Complete F&O Watchlist")
         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
 
     # Column Workspace B: Dedicated Buy Box Container

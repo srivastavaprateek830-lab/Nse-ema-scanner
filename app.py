@@ -119,25 +119,23 @@ if not results_df.empty:
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean().dropna().sort_values(by="Change", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # --- 📊 STRUCTURAL MASTER TWO-COLUMN MAIN DIVISION ---
-    # Left splits 48% for full watchlist, Right splits 52% to house the condensed matrix and side panels
-    col_left_master, col_right_container = st.columns([0.48, 0.52])
+    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
+    col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
-    # Populating Column 1 (Left Side Full-Height Complete Watchlist)
-    col_left_master.subheader("🔍 Complete F&O Watchlist")
-    selected_row = col_left_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+    # Column 1: Watchlist (Captures user checkbox actions interactively)
+    col_master.subheader("🔍 Complete F&O Watchlist")
+    selected_row = col_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 
-    # --- 🎯 POPULATING THE RIGHT CONTAINER (TOP MATRICES AREA) ---
-    col_right_container.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
+    # --- 🎯 MOVED TO TOP: CONDENSED PANELS SECTION (RED HIGHLIGHTED AREA) ---
+    col_buy.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
     
-    # Safe String Parser: Unpacks selection row data cleanly into a pure ticker name string
+    # Selection mapping: Fixed! Extracted the clean text value string out of the numerical index list array safely
     sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
-    active_ticker = "ACC"
-    if sel_rows and len(sel_rows) > 0:
-        raw_val = display_master_df.iloc[sel_rows[0]]["Ticker"]
-        active_ticker = str(raw_val)
+    
+    # Extracts only the raw text name string, discarding metadata labels entirely
+    active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"]) if (sel_rows and len(sel_rows) > 0) else "ACC"
 
-    with col_right_container.spinner(f"Updating trend for {active_ticker}..."): 
+    with col_buy.spinner(f"Updating trend for {active_ticker}..."): 
         st_matrix_df = get_supertrend_row(active_ticker)
         
     def format_to_pure_dots(val):
@@ -146,30 +144,33 @@ if not results_df.empty:
         if 'Stock Name' in str(val) or val == active_ticker: return str(val)
         return '⚪'
         
+    def style_cells(v):
+        if '🟢' in str(v): return 'background-color: rgba(41, 181, 232, 0.1); color: #29b5e8; font-weight: bold;'
+        if '🔴' in str(v): return 'background-color: rgba(255, 75, 75, 0.1); color: #ff4b4b; font-weight: bold;'
+        return ''
+        
     if not st_matrix_df.empty:
         condensed_dots_df = st_matrix_df.map(format_to_pure_dots)
-        col_right_container.dataframe(condensed_dots_df, use_container_width=True, hide_index=True)
+        col_buy.dataframe(condensed_dots_df, use_container_width=True, hide_index=True)
     else:
-        col_right_container.info("No trend data loaded.")
+        col_buy.info("No trend data loaded.")
         
-    col_right_container.markdown("---")
+    col_buy.markdown("---")
 
-    # Creating sub-columns strictly inside the right-hand container layout to balance space grids
-    sub_col_buy, sub_col_sell, sub_col_sectors = col_right_container.columns([0.33, 0.33, 0.34])
-
-    sub_col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
+    # Column 2: Buy Side Box
+    col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
     if len(buy_df) > 0:
-        sub_col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
+        col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
     else:
-        sub_col_buy.info("No stocks down.")
+        col_buy.info("No stocks down.")
 
-    # Fixed: Re-routed container targets to use 'sub_col_sell' token to permanently clear the NameError crash
-       # Fixed: Re-routed container targets to use 'sub_col_sell' token to permanently clear the NameError crash
-    sub_col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
+    # Column 3: Sell Side Box (No duplicate duplicates remain here)
+    col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:
-        sub_col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
+        col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
     else:
-        sub_col_sell.info("No stocks pumped.")
+        col_sell.info("No stocks pumped.")
+
 
 
 

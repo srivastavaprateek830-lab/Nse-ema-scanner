@@ -101,7 +101,7 @@ def get_supertrend_timeframes(ticker_clean):
     query_ticker = ticker_clean.replace("&", "_")
     for label, tf in timeframes.items():
         try:
-            handler = TA_Handler(symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
+            handler = TA_Handler(family="standard", symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
             analysis = handler.get_analysis()
             st_lower = analysis.indicators.get("Supertrend.lower")
             st_upper = analysis.indicators.get("Supertrend.upper")
@@ -156,4 +156,3 @@ if not results_df.empty:
                 else:
                     bg_color = "rgba(255, 255, 255, 0.05)"
                     border_color = "#777777"
-                st.markdown(

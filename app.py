@@ -86,7 +86,6 @@ def scan_markets_bulk_tv():
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_row(ticker_clean):
-    # Fixed the precise intraday keyword tokens here to avoid any background crashes
     timeframes = {
         "Weekly": Interval.INTERVAL_1_WEEK,
         "Daily": Interval.INTERVAL_1_DAY,
@@ -127,17 +126,23 @@ if not results_df.empty:
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean().dropna().sort_values(by="Change", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID (Restored) ---
+    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
     col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
+    # Column 1: Watchlist
     col_master.subheader("🔍 Complete F&O Watchlist")
     selected_row = col_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 
+    # Column 2: Buy Side Box
     col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
     col_buy.markdown("<br>", unsafe_allow_html=True)
-    col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True) if not buy_signals_df.empty else col_buy.info("No stocks meet strict -10% buy deviation.")
+    # Fixed: Wrapped inside structured indentation blocks to remove the Delta protobuf errors
+    if not buy_signals_df.empty:
+        col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
+    else:
+        col_buy.info("No stocks meet strict -10% buy deviation.")
 
+    # Column 3: Sell Side Box
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
     col_sell.markdown("<br>", unsafe_allow_html=True)
-    col_sell.dataframe(sell_signals_df, use_container_width=True, hide_index=True) if not sell_signals_df.empty else col_sell.info("No stocks meet strict +10% sell deviation.")
-
+    if not sell_signals_df.empty:

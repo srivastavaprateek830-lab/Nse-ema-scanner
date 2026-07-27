@@ -181,12 +181,15 @@ if not results_df.empty:
     daily_trend = calculate_supertrend(stock_history_df)
     
     # Weekly sampling proxy logic transformation
-    weekly_history_df = stock_history_df.resample('W').last()
-    weekly_trend = calculate_supertrend(weekly_history_df)
+    if not stock_history_df.empty:
+        weekly_history_df = stock_history_df.resample('W').last()
+        weekly_trend = calculate_supertrend(weekly_history_df)
+    else:
+        weekly_trend = "实时 NEUTRAL"
     
     # Since intraday data isn't tracked in a daily endpoint, we approximate intraday momentum 
     # based on session standard deviation parameters to keep the table fully populated with calculations
-    hourly_trend = "🟢 BULLISH" if (daily_trend == "🟢 BULLISH" and all_sorted.loc[all_sorted["Ticker"] == active_stock_clean, "Deviation (%)"].values > 0) else "🔴 BEARISH"
+    hourly_trend = "🟢 BULLISH" if (daily_trend == "🟢 BULLISH" and all_sorted.loc[all_sorted["Ticker"] == active_stock_clean, "Deviation (%)"].values[0] > 0) else "🔴 BEARISH"
     min15_trend = "🟢 BULLISH" if (hourly_trend == "🟢 BULLISH") else "🔴 BEARISH"
 
     # Compile the final tabular matrix data configuration frame
@@ -198,13 +201,9 @@ if not results_df.empty:
         "15 Min": min15_trend
     }])
 
-    # Fixed: Re-aligned text coloring lambda functions to be completely indentation safe
+    # Fixed: Re-aligned text coloring lambda functions to be completely syntax and parenthesis safe
     def style_supertrend_cells(val):
         if 'BULLISH' in str(val):
             return 'background-color: rgba(41, 181, 232, 0.2); color: #29b5e8; font-weight: bold;'
         elif 'BEARISH' in str(val):
             return 'background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;'
-        else:
-            return ''
-
-    st.dataframe(

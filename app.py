@@ -50,7 +50,7 @@ def scan_markets():
     for ticker in FO_TICKERS:
         try:
             # Extract ticker specific dataframe safely
-            df = data[ticker].dropna() if ticker in data.columns.levels[0] else pd.DataFrame()
+            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
             if df.empty or len(df) < 20:
                 continue
                 
@@ -106,9 +106,14 @@ if not results_df.empty:
     
     if selected_ticker:
         try:
-            # We fetch historical frame only for the 1 specific clicked stock to avoid bulk locks
+            # Create the exact same proxy session to fetch single stock chart safely
+            chart_session = requests.Session()
+            chart_session.headers.update({
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            })
+            
             ticker_ns = f"{selected_ticker}.NS"
-            chart_df = yf.download(ticker_ns, period="3mo", interval="1d", progress=False)
+            chart_df = yf.download(ticker_ns, period="3mo", interval="1d", progress=False, session=chart_session)
             if not chart_df.empty:
                 chart_df['EMA20 Line'] = chart_df['Close'].ewm(span=20, adjust=False).mean()
                 

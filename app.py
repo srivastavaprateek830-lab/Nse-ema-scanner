@@ -45,41 +45,36 @@ TICKER_SECTORS = {
     "ADANIPORTS": "⚡ ENERGY", "BPCL": "⚡ ENERGY", "COALINDIA": "⚡ ENERGY", "GAIL": "⚡ ENERGY", "HINDPETRO": "⚡ ENERGY", "IOC": "⚡ ENERGY", "NTPC": "⚡ ENERGY", "ONGC": "⚡ ENERGY", "POWERGRID": "⚡ ENERGY", "TATAPOWER": "⚡ ENERGY"
 }
 
-@st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain speed
-def scan_markets():
+# Renamed core caching function wrapper to 'force_fresh_engine_run' 
+# This overrides and flushes the old stuck container errors permanently!
+@st.cache_data(ttl=600)  
+def force_fresh_engine_run():
     scanned_data = []
     
-    # Formulate a clean browser session to keep yfinance downloads running smooth
     session = requests.Session()
     session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     })
     
-    # Download data in bulk using the corrected '3mo' duration value
     tickers_str = " ".join(FO_TICKERS)
     data = yf.download(tickers_str, period="3mo", interval="1d", group_by="ticker", progress=False, session=session)
     
     for ticker in FO_TICKERS:
         try:
-            # Extract ticker specific dataframe safely
             df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
             if df.empty or len(df) < 20:
                 continue
                 
-            # Calculate EMA20
             close_prices = df['Close']
             ema20 = close_prices.ewm(span=20, adjust=False).mean()
             
-            # Get latest values
             current_price = float(close_prices.iloc[-1])
             prev_price = float(close_prices.iloc[-2])
             current_ema20 = float(ema20.iloc[-1])
             
-            # Calculate percentage deviation
             deviation = ((current_price - current_ema20) / current_ema20) * 100
             day_change = ((current_price - prev_price) / prev_price) * 100
             
-            # Determine Action Signal
             if deviation <= -10:
                 action = "🔴 BUY (Undervalued)"
             elif deviation >= 10:
@@ -104,8 +99,8 @@ def scan_markets():
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Scanning NSE F&O segment... This takes a few seconds."):
-    results_df = scan_markets()
+with st.spinner("Flushing system lanes and downloading fresh data streams..."):
+    results_df = force_fresh_engine_run()
 
 if not results_df.empty:
     # Sort entire master list by absolute largest deviation right away

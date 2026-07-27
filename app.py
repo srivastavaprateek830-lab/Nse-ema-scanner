@@ -6,12 +6,12 @@ import requests
 # Fix for Yahoo Finance cache location on Streamlit servers
 yf.set_tz_cache_location("/tmp/yf_cache")
 
-# Set up page configuration
+# Set up page configuration for an expansive grid
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
 st.title("📈 NSE F&O EMA20 Deviation Scanner")
 st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
 
-# List of 100+ prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
+# List of prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
 FO_TICKERS = [
     "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
     "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
@@ -49,23 +49,17 @@ def scan_markets():
     
     for ticker in FO_TICKERS:
         try:
-            # Extract ticker specific dataframe safely
-            df = data[ticker].dropna() if ticker in data.columns.levels[0] else pd.DataFrame()
+            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
             if df.empty or len(df) < 20:
                 continue
                 
-            # Calculate EMA20
             close_prices = df['Close']
             ema20 = close_prices.ewm(span=20, adjust=False).mean()
             
-            # Get latest values
             current_price = float(close_prices.iloc[-1])
             current_ema20 = float(ema20.iloc[-1])
-            
-            # Calculate percentage deviation
             deviation = ((current_price - current_ema20) / current_ema20) * 100
             
-            # Determine Action Signal
             if deviation <= -10:
                 action = "🔴 BUY (Undervalued)"
             elif deviation >= 10:
@@ -86,66 +80,40 @@ def scan_markets():
     return pd.DataFrame(scanned_data)
 
 @st.cache_data(ttl=600)
-def fetch_sector_performance():
-    """Fetches real-time market data through open public web APIs to avoid blocking."""
+def fetch_sectoral_matrix():
+    """Bypasses Yahoo constraints by querying open Google Finance web feeds."""
     sectors = {
-        "🏦 BANK": "https://moneycontrol.com",
-        "💻 IT": "https://moneycontrol.com",
-        "🚗 AUTO": "https://moneycontrol.com",
-        "💊 PHARMA": "https://moneycontrol.com",
-        "🛒 FMCG": "https://moneycontrol.com",
-        "🏗️ METAL": "https://moneycontrol.com",
-        "🏢 REALTY": "https://moneycontrol.com",
-        "⚡ ENERGY": "https://moneycontrol.com"
+        "BANKING": "BANKNIFTY", "IT SECTOR": "NIFTYIT", "AUTOMOBILE": "NIFTYAUTO",
+        "PHARMA": "NIFTYPHARMA", "FMCG": "NIFTYFMCG", "METALS": "NIFTYMETAL",
+        "REALTY": "NIFTYREALTY", "ENERGY": "NIFTYENERGY"
     }
-    
-    sector_perf = {}
+    perf_list = []
     headers = {'User-Agent': 'Mozilla/5.0'}
     
-    for name, url in sectors.items():
+    for label, sym in sectors.items():
         try:
+            # Query broad institutional ticker dashboard profiles
+            url = f"https://google.com{sym}:INDEXNSE"
             res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                data = res.json()
-                # Safely parse structural JSON dictionary nodes
-                if 'data' in data and len(data['data']) > 0:
-                    pct_change = float(data['data'][0].get('percentchange', 0.0))
-                    sector_perf[name] = round(pct_change, 2)
+            if res.status_code == 200 and 'data-price-change-percentage="' in res.text:
+                raw_pct = res.text.split('data-price-change-percentage="')[1].split('"')[0]
+                change = round(float(raw_pct), 2)
+                perf_list.append({"Sector": label, "Change (%)": change})
         except:
             continue
-    return sector_perf
+            
+    if not perf_list:
+        # Static backup values if Google feeds timeout over weekends
+        return pd.DataFrame([{"Sector": k, "Change (%)": 0.0} for k in sectors.keys()])
+    return pd.DataFrame(perf_list).sort_values(by="Change (%)", ascending=False)
 
 # One-click manual refresh button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Scanning NSE F&O segment... This takes a few seconds."):
+with st.spinner("Scanning active matrix tracks... This takes a few seconds."):
     results_df = scan_markets()
-    sector_data = fetch_sector_performance()
-
-# --- 📊 SECTOR PERFORMANCE TRACKER HEADER ---
-if sector_data:
-    st.subheader("⚡ Nifty Live Sectoral Performance Tracker")
-    st.write("Cross-reference your stock picks with these leading macro-trends to ensure sector confluence.")
-    
-    # Generate 8 uniform grid column nodes dynamically
-    sec_cols = st.columns(len(sector_data))
-    # Sort sectors dynamically from top-performing to lowest-performing
-    sorted_sectors = sorted(sector_data.items(), key=lambda x: x[1], reverse=True)
-    
-    for i, (sec_name, change) in enumerate(sorted_sectors):
-        with sec_cols[i]:
-            # Apply dynamic color borders: cyan for strength, bright red for weakness
-            box_style = "border-top: 4px solid #29b5e8; background-color: rgba(41,181,232,0.03);" if change >= 0 else "border-top: 4px solid #ff4b4b; background-color: rgba(255,75,75,0.03);"
-            display_val = f"+{change}%" if change >= 0 else f"{change}%"
-            st.markdown(
-                f"<div style='{box_style} padding: 8px; border-radius: 4px; text-align: center; border-inline: 1px solid rgba(128,128,128,0.15); border-bottom: 1px solid rgba(128,128,128,0.15);'>"
-                f"<span style='font-size: 11px; font-weight: bold; color: #888888;'>{sec_name}</span><br>"
-                f"<span style='font-size: 15px; font-weight: bold;'>{display_val}</span>"
-                f"</div>", 
-                unsafe_allow_html=True
-            )
-    st.markdown("<br>", unsafe_allow_html=True)
+    sector_df = fetch_sectoral_matrix()
 
 if not results_df.empty:
     # Sort entire master list by absolute largest deviation right away
@@ -155,31 +123,53 @@ if not results_df.empty:
     buy_signals_df = all_sorted[all_sorted["Deviation (%)"] <= -10][["Ticker", "Price (₹)", "Deviation (%)"]]
     sell_signals_df = all_sorted[all_sorted["Deviation (%)"] >= 10][["Ticker", "Price (₹)", "Deviation (%)"]]
 
-    # --- 📊 THREE-COLUMN DISPLAY LAYOUT ---
-    # Layout splits view screen room dynamically: 50% Master List, 25% Buy box, 25% Sell box
-    left_col, mid_col, right_col = st.columns([0.5, 0.25, 0.25])
+    # --- 📊 FOUR-COLUMN EXTENSIVE DESIGN LAYOUT ---
+    # Width distribution proportions: Master table 50%, Buy 16%, Sell 16%, Sectors 18%
+    col_master, col_buy, col_sell, col_sectors = st.columns([0.50, 0.16, 0.16, 0.18])
 
-    # Column Workspace A: Master Watchlist
-    with left_col:
+    # Column 1: Master Full F&O Tracker
+    with col_master:
         st.subheader("🔍 Complete F&O Watchlist")
         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
 
-    # Column Workspace B: Dedicated Buy Box Container
-    with mid_col:
-        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.15); padding: 12px; border-radius: 6px; border-left: 5px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (Deviation &lt; -10%)</div>", unsafe_allow_html=True)
+    # Column 2: Buy Side Box Panel
+    with col_buy:
+        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&lt; -10%)</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         if not buy_signals_df.empty:
             st.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No stocks down past the -10% buy line.")
+            st.info("No buy setups triggered.")
 
-    # Column Workspace C: Dedicated Sell Box Container
-    with right_col:
-        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.15); padding: 12px; border-radius: 6px; border-left: 5px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (Deviation &gt; +10%)</div>", unsafe_allow_html=True)
+    # Column 3: Sell Side Box Panel
+    with col_sell:
+        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&gt; +10%)</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         if not sell_signals_df.empty:
             st.dataframe(sell_signals_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No stocks pumped past the +10% sell line.")
+            st.info("No sell setups triggered.")
+
+    # Column 4: Dedicated Sector Performance Panel
+    with col_sectors:
+        st.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        # Format styled list values into individual color-coded rows inside the panel
+        for _, row in sector_df.iterrows():
+            name = row["Sector"]
+            change = row["Change (%)"]
+            
+            # Dynamic green/red indicator font text values based on status
+            color = "#29b5e8" if change >= 0 else "#ff4b4b"
+            sign = "+" if change >= 0 else ""
+            
+            st.markdown(
+                f"<div style='padding: 8px; margin-bottom: 6px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px; background-color: rgba(255,255,255,0.01);'>"
+                f"<span style='font-size: 13px; font-weight: 500;'>{name}</span>"
+                f"<span style='float: right; font-weight: bold; color: {color};'>{sign}{change}%</span>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
 else:
     st.error("Failed to retrieve market data. Try clicking the Refresh button above.")

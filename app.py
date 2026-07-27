@@ -5,7 +5,7 @@ from tradingview_ta import get_multiple_analysis, TA_Handler, Interval
 # Page setup configuration for broad 4-column institutional layout
 st.set_page_config(page_title="NSE F&O Institutional Dashboard", layout="wide")
 st.title("📈 NSE F&O Institutional Strategy Dashboard")
-st.write("Scans NSE F&O segments on the **Daily (1D) Timeframe** using TradingView's unblocked bulk technical engine.")
+st.write("Scans NSE F&O segments on the **Daily (1D) Timeframe** using TradingView's bulk technical engine.")
 
 # Standardized high-liquidity F&O Ticker list formatted for TradingView's NSE Exchange routing
 FO_TICKERS = [
@@ -127,7 +127,7 @@ if not results_df.empty:
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
     # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
-    # Bulletproof Setup: We drop 'with' headers and pass variables straight down, removing indentation requirements completely.
+    # Flat Layout: Columns are initialized flats. All child content uses direct positional assignment.
     col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
     # Column 1: Watchlist
@@ -137,8 +137,10 @@ if not results_df.empty:
     # Column 2: Buy Side Box
     col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
     col_buy.markdown("<br>", unsafe_allow_html=True)
-    # Replaced multi-line if statement with a direct inline length checker to guarantee zero structural syntax risks
-    col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True) if len(buy_signals_df) > 0 else col_buy.info("No stocks meet strict -10% buy deviation.")
+    # Direct list counting fallback engine blocks any room for IndentationError crashes
+    final_buy_df = buy_signals_df if len(buy_signals_df) > 0 else pd.DataFrame([{"Ticker": "No signals", "Price (₹)": "-", "Deviation (%)": "-", "RSI (14)": "-"}])
+    col_buy.dataframe(final_buy_df, use_container_width=True, hide_index=True)
 
     # Column 3: Sell Side Box
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
+col_sell.markdown("", unsafe_allow_html=True)final_sell_df = sell_signals_df if len(sell_signals_df) > 0 else pd.DataFrame([{"Ticker": "No signals", "Price (₹)": "-", "Deviation (%)": "-", "RSI (14)": "-"}])col_sell.dataframe(final_sell_df, use_container_width=True, hide_index=True)# Column 4: Sectors Boxcol_sectors.markdown("⚡ Nifty Sectors Performance", unsafe_allow_html=True)col_sectors.markdown("", unsafe_allow_html=True)for _, row in sector_summary.iterrows():name = row["Sector"]change = round(row["Change"], 2)color = "#29b5e8" if change >= 0 else "#ff4b4b"sign = "+" if change >= 0 else ""col_sectors.markdown(f"{name}{sign}{change}%", unsafe_allow_html=True)# --- 🛠️ TABULAR SUPERTREND GRID LOOKUP PANEL ---st.markdown("---")st.subheader("🎯 Live Multi-Timeframe SuperTrend Status Matrix")st.caption("💡 Pro-Tip: Click on any stock row in the 'Complete F&O Watchlist' table above to instantly load its SuperTrend statuses below.")# Fetch active row choices safely using a flat one-lineractive_ticker = display_master_df.iloc[selected_row['selection']['rows']]["Ticker"] if (selected_row and 'rows' in selected_row.get('selection', {}) and selected_row['selection']['rows']) else "ACC"with st.spinner(f"Updating trend matrices for {active_ticker}..."):st_matrix_df = get_supertrend_row(active_ticker)st.dataframe(st_matrix_df.style.map(lambda val: 'background-color: rgba(41, 181, 232, 0.2); color: #29b5e8; font-weight: bold;' if 'BULLISH' in str(val)else ('background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;' if 'BEARISH' in str(val) else ''),subset=['Weekly', 'Daily', 'Hourly', '15 Min']),use_container_width=True,hide_index=True)else:st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")

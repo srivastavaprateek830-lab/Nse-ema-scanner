@@ -69,12 +69,7 @@ def scan_markets_bulk_tv():
                 if current_price == 0.0 or current_ema20 == 0.0:
                     continue
                 deviation = ((current_price - current_ema20) / current_ema20) * 100
-                if deviation <= -10.0:
-                    action = "🔴 BUY"
-                elif deviation >= 10.0:
-                    action = "🟢 SELL"
-                else:
-                    action = "⚪ HOLD"
+                action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
                 scanned_data.append({
                     "Ticker": ticker[1].replace("_", "&"),
                     "Price (₹)": round(current_price, 2),
@@ -91,12 +86,7 @@ def scan_markets_bulk_tv():
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_row(ticker_clean):
-    timeframes = {
-        "Weekly": Interval.INTERVAL_1_WEEK,
-        "Daily": Interval.INTERVAL_1_DAY,
-        "Hourly": Interval.INTERVAL_1_HOUR,
-        "15 Min": Interval.INTERVAL_15_MINUTES
-    }
+    timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
     st_row = {"Stock Name": ticker_clean}
     query_ticker = ticker_clean.replace("&", "_")
     for label, tf in timeframes.items():
@@ -132,25 +122,18 @@ if not results_df.empty:
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
     # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
-    # Flat design: Columns are created here and populated directly, avoiding 'with' indentation entirely
+    # Bulletproof Setup: No inner conditional blocks are used here, resolving all indentation risks permanently.
     col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
     col_master.subheader("🔍 Complete F&O Watchlist")
-    selected_row = col_master.dataframe(
-        display_master_df, 
-        use_container_width=True, 
-        hide_index=True,
-        on_select="rerun",
-        selection_mode="single-row"
-    )
+    selected_row = col_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 
     col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
     col_buy.markdown("<br>", unsafe_allow_html=True)
-    if not buy_signals_df.empty:
-        col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True)
-    else:
-        col_buy.info("No stocks meet strict -10% buy deviation.")
+    # Inline verification: Safely maps data structures without inner statements
+    col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True) if not buy_signals_df.empty else col_buy.info("No stocks meet strict -10% buy deviation.")
 
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
     col_sell.markdown("<br>", unsafe_allow_html=True)
-    if not sell_signals_df.empty:
+    col_sell.dataframe(sell_signals_df, use_container_width=True, hide_index=True) if not sell_signals_df.empty else col_sell.info("No stocks meet strict +10% sell deviation.")
+

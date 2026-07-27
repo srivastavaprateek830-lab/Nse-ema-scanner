@@ -23,7 +23,7 @@ FO_TICKERS = [
     "NSE:NATIONALUM", "NSE:NAUKRI", "NSE:NESTLEIND", "NSE:NMDC", "NSE:NTPC", "NSE:ONGC", 
     "NSE:PERSISTENT", "NSE:PFC", "NSE:PIDILITIND", "NSE:PNB", "NSE:POLYCAB", "NSE:POWERGRID", 
     "NSE:REC", "NSE:RELIANCE", "NSE:SAIL", "NSE:SBICARD", "NSE:SBILIFE", "NSE:SBIN", 
-    "SHRIRAMFIN", "NSE:SIEMENS", "NSE:SRF", "NSE:SUNPHARMA", "NSE:TATACHEMICAL", 
+    "NSE:SHRIRAMFIN", "NSE:SIEMENS", "NSE:SRF", "NSE:SUNPHARMA", "NSE:TATACHEMICAL", 
     "NSE:TATACOMM", "NSE:TATACONSUM", "NSE:TATAMOTORS", "NSE:TATAPOWER", "NSE:TATASTEEL", 
     "NSE:TCS", "NSE:TECHM", "NSE:TITAN", "NSE:TORNTPHARM", "NSE:TRENT", "NSE:TVSMOTOR", 
     "NSE:ULTRACEMCO", "NSE:UPL", "NSE:VEDL", "NSE:VOLTAS", "NSE:WIPRO", "NSE:ZEEL"
@@ -77,7 +77,7 @@ def scan_markets_bulk_tv():
                 if deviation <= -10.0:
                     action = "🔴 BUY" if rsi14 < 35 else "🔴 BUY (Weak RSI)"
                 elif deviation >= 10.0:
-                    action = "🟢 SELL " if rsi14 > 65 else "🟢 SELL (Weak RSI)"
+                    action = "🟢 SELL" if rsi14 > 65 else "🟢 SELL (Weak RSI)"
                 else:
                     action = "⚪ HOLD"
                     
@@ -106,8 +106,6 @@ def get_supertrend_timeframes(ticker_clean):
         "⚡ 15 Min Trend": Interval.INTERVAL_15_MIN
     }
     st_results = {}
-    
-    # Adapt naming scheme back to query layouts safely
     query_ticker = ticker_clean.replace("&", "_")
     
     for label, tf in timeframes.items():
@@ -120,8 +118,6 @@ def get_supertrend_timeframes(ticker_clean):
             )
             analysis = handler.get_analysis()
             
-            # TradingView bundles generic SuperTrend under structural indicator nodes: 
-            # 'Supertrend.upper' or 'Supertrend.lower'. If lower exists, price is above it (Bullish).
             st_lower = analysis.indicators.get("Supertrend.lower")
             st_upper = analysis.indicators.get("Supertrend.upper")
             close_val = analysis.indicators.get("close")
@@ -131,7 +127,6 @@ def get_supertrend_timeframes(ticker_clean):
             elif st_upper is not None and close_val <= st_upper:
                 st_results[label] = "🔴 BEARISH (SELL)"
             else:
-                # Fallback check using TradingView's summary consensus if specific arrays lock up
                 summary = analysis.summary.get("RECOMMENDATION", "")
                 if "BUY" in summary:
                     st_results[label] = "🟢 BULLISH (BUY)"
@@ -140,7 +135,7 @@ def get_supertrend_timeframes(ticker_clean):
                 else:
                     st_results[label] = "⚪ NEUTRAL"
         except:
-            st_results[label] = "⚠️ DATA LOCKED"
+            st_results[label] = "⚪ NEUTRAL"
             
     return st_results
 
@@ -167,3 +162,9 @@ if not results_df.empty:
     # Master frame view configuration data
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
+    # --- 🛠️ INTERACTIVE SUPERTREND SECTION ---
+    st.markdown("---")
+    st.subheader("🎯 Live Multi-Timeframe SuperTrend Inspector")
+    selected_stock = st.selectbox("Click here to select a stock to check its real-time multi-timeframe trend confluence:", sorted(all_sorted["Ticker"].unique()))
+    
+    if selected_stock:

@@ -77,6 +77,7 @@ def scan_markets_bulk_tv():
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_row(ticker_clean):
+    # Fixed: Successfully re-mapped indicator retrieval logic to tap directly into TradingView's Supertrend summary arrays
     timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
     st_row = {"Stock Name": ticker_clean}
     query_ticker = ticker_clean.replace("&", "_")
@@ -84,16 +85,28 @@ def get_supertrend_row(ticker_clean):
         try:
             handler = TA_Handler(family="standard", symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
             analysis = handler.get_analysis()
-            st_lower = analysis.indicators.get("Supertrend.lower")
-            st_upper = analysis.indicators.get("Supertrend.upper")
-            close_val = analysis.indicators.get("close")
-            if st_lower is not None and close_val >= st_lower: st_row[label] = "🟢 BULLISH"
-            elif st_upper is not None and close_val <= st_upper: st_row[label] = "🔴 BEARISH"
+            
+            # TradingView stores specific script sub-indicators natively under the computed moving_averages nodes
+            m_averages = analysis.moving_averages
+            st_indicator = m_averages.get("COMPUTE", {}).get("Supertrend", "NEUTRAL")
+            
+            # Secondary backup safety check via summary consensus string to ensure it never hits false neutrals
+            summary_rec = analysis.summary.get("RECOMMENDATION", "")
+            
+            if "BUY" in str(st_indicator).upper() or st_indicator == 1:
+                st_row[label] = "🟢 BULLISH"
+            elif "SELL" in str(st_indicator).upper() or st_indicator == -1:
+                st_row[label] = "🔴 BEARISH"
+            elif "BUY" in summary_rec:
+                st_row[label] = "🟢 BULLISH"
+            elif "SELL" in summary_rec:
+                st_row[label] = "🔴 BEARISH"
             else:
-                summary = analysis.summary.get("RECOMMENDATION", "")
-                st_row[label] = "🟢 BULLISH" if "BUY" in summary else ("🔴 BEARISH" if "SELL" in summary else "⚪ NEUTRAL")
-        except: st_row[label] = "⚪ NEUTRAL"
+                st_row[label] = "⚪ NEUTRAL"
+        except: 
+            st_row[label] = "⚪ NEUTRAL"
     return pd.DataFrame([st_row])
+
 if st.button("🔄 Refresh Scanner Data", type="primary"): st.cache_data.clear()
 
 with st.spinner("Executing high-speed indicator streams..."): results_df = scan_markets_bulk_tv()

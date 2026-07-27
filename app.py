@@ -6,12 +6,12 @@ import requests
 # Fix for Yahoo Finance cache location on Streamlit servers
 yf.set_tz_cache_location("/tmp/yf_cache")
 
-# Set up page configuration for an expansive grid layout
+# Set up page configuration for an expansive 4-column layout
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
 st.title("📈 NSE F&O EMA20 Deviation Scanner")
 st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
 
-# Curated list of high-liquidity NSE F&O Tickers
+# List of 100+ prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
 FO_TICKERS = [
     "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
     "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
@@ -33,34 +33,57 @@ FO_TICKERS = [
     "ULTRACEMCO.NS", "UPL.NS", "VEDL.NS", "VOLTAS.NS", "WIPRO.NS", "ZEEL.NS"
 ]
 
-@st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain stability
+# Sector Mapping Lookup table to calculate performance values natively
+TICKER_SECTORS = {
+    "AXISBANK": "🏦 BANKING", "BANKBARODA": "🏦 BANKING", "CANBK": "🏦 BANKING", "HDFCBANK": "🏦 BANKING", "ICICIBANK": "🏦 BANKING", "KOTAKBANK": "🏦 BANKING", "PNB": "🏦 BANKING", "SBIN": "🏦 BANKING",
+    "COFORGE": "💻 IT SECTOR", "HCLTECH": "💻 IT SECTOR", "INFY": "💻 IT SECTOR", "LTIM": "💻 IT SECTOR", "PERSISTENT": "💻 IT SECTOR", "TCS": "💻 IT SECTOR", "TECHM": "💻 IT SECTOR", "WIPRO": "💻 IT SECTOR",
+    "BAJAJ-AUTO": "🚗 AUTO", "EICHERMOT": "🚗 AUTO", "HEROMOTOCO": "🚗 AUTO", "M&M": "🚗 AUTO", "MARUTI": "🚗 AUTO", "TATAMOTORS": "🚗 AUTO", "TVSMOTOR": "🚗 AUTO",
+    "CIPLA": "💊 PHARMA", "DIVISLAB": "💊 PHARMA", "DRREDDY": "💊 PHARMA", "GLENMARK": "💊 PHARMA", "LUPIN": "💊 PHARMA", "SUNPHARMA", "TORNTPHARM": "💊 PHARMA",
+    "BRITANNIA": "🛒 FMCG", "DABUR": "🛒 FMCG", "HINDUNILVR": "🛒 FMCG", "ITC": "🛒 FMCG", "NESTLEIND": "🛒 FMCG", "TATACONSUM": "🛒 FMCG",
+    "HINDALCO": "🏗️ METALS", "JINDALSTEL": "🏗️ METALS", "JSWSTEEL": "🏗️ METALS", "NATIONALUM": "🏗️ METALS", "SAIL": "🏗️ METALS", "TATASTEEL": "🏗️ METALS", "VEDL": "🏗️ METALS",
+    "DLF": "🏢 REALTY", "GODREJPROP": "🏢 REALTY", "OBEROIRLTY": "🏢 REALTY",
+    "ADANIPORTS": "⚡ ENERGY", "BPCL": "⚡ ENERGY", "COALINDIA": "⚡ ENERGY", "GAIL": "⚡ ENERGY", "HINDPETRO": "⚡ ENERGY", "IOC": "⚡ ENERGY", "NTPC": "⚡ ENERGY", "ONGC", "POWERGRID": "⚡ ENERGY", "TATAPOWER": "⚡ ENERGY"
+}
+
+@st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain speed
 def scan_markets():
     scanned_data = []
     
-    # Formulate a clean browser session to keep yfinance downloads running smoothly
+    # Formulate a clean browser session to keep yfinance downloads running smooth
     session = requests.Session()
     session.headers.update({
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     })
     
-    # Process individual loops to prevent bulk connection dropping blocks
+    # Download data in bulk using the corrected '3mo' duration value
+    tickers_str = " ".join(FO_TICKERS)
+    data = yf.download(tickers_str, period="3mo", interval="1d", group_by="ticker", progress=False, session=session)
+    
     for ticker in FO_TICKERS:
         try:
-            df = yf.download(ticker, period="3mo", interval="1d", progress=False, session=session, show_errors=False)
+            # Extract ticker specific dataframe safely
+            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
             if df.empty or len(df) < 20:
                 continue
                 
+            # Calculate EMA20
             close_prices = df['Close']
             ema20 = close_prices.ewm(span=20, adjust=False).mean()
             
+            # Get latest values
             current_price = float(close_prices.iloc[-1])
+            prev_price = float(close_prices.iloc[-2])
             current_ema20 = float(ema20.iloc[-1])
-            deviation = ((current_price - current_ema20) / current_ema20) * 100
             
+            # Calculate percentage deviation
+            deviation = ((current_price - current_ema20) / current_ema20) * 100
+            day_change = ((current_price - prev_price) / prev_price) * 100
+            
+            # Determine Action Signal
             if deviation <= -10:
-                action = "🔴 BUY"
+                action = "🔴 BUY (Undervalued)"
             elif deviation >= 10:
-                action = "🟢 SELL"
+                action = "🟢 SELL (Overvalued)"
             else:
                 action = "⚪ HOLD / NEUTRAL"
                 
@@ -69,46 +92,20 @@ def scan_markets():
                 "Price (₹)": round(current_price, 2),
                 "EMA20 (₹)": round(current_ema20, 2),
                 "Deviation (%)": round(deviation, 2),
-                "Action": action
+                "Action": action,
+                "Change": day_change
             })
-        except:
+        except Exception:
             continue
             
     return pd.DataFrame(scanned_data)
-
-@st.cache_data(ttl=600)
-def fetch_sectoral_matrix():
-    """Queries open web structures on Google Finance to obtain index performance metrics safely."""
-    sectors = {
-        "BANKING": "BANKNIFTY", "IT SECTOR": "NIFTYIT", "AUTOMOBILE": "NIFTYAUTO",
-        "PHARMA": "NIFTYPHARMA", "FMCG": "NIFTYFMCG", "METALS": "NIFTYMETAL",
-        "REALTY": "NIFTYREALTY", "ENERGY": "NIFTYENERGY"
-    }
-    perf_list = []
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    
-    for label, sym in sectors.items():
-        try:
-            url = f"https://google.com{sym}:INDEXNSE"
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200 and 'data-price-change-percentage="' in res.text:
-                raw_pct = res.text.split('data-price-change-percentage="')[1].split('"')[0]
-                change = round(float(raw_pct), 2)
-                perf_list.append({"Sector": label, "Change (%)": change})
-        except:
-            continue
-            
-    if not perf_list:
-        return pd.DataFrame([{"Sector": k, "Change (%)": 0.0} for k in sectors.keys()])
-    return pd.DataFrame(perf_list).sort_values(by="Change (%)", ascending=False)
 
 # One-click manual refresh button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Streaming safe institutional data tracks... This takes a few seconds."):
+with st.spinner("Scanning NSE F&O segment... This takes a few seconds."):
     results_df = scan_markets()
-    sector_df = fetch_sectoral_matrix()
 
 if not results_df.empty:
     # Sort entire master list by absolute largest deviation right away
@@ -118,6 +115,14 @@ if not results_df.empty:
     buy_signals_df = all_sorted[all_sorted["Deviation (%)"] <= -10][["Ticker", "Price (₹)", "Deviation (%)"]]
     sell_signals_df = all_sorted[all_sorted["Deviation (%)"] >= 10][["Ticker", "Price (₹)", "Deviation (%)"]]
 
+    # Natively calculate the Sectoral Index change using data we already downloaded
+    all_sorted["Sector"] = all_sorted["Ticker"].map(TICKER_SECTORS)
+    sector_summary = all_sorted.groupby("Sector")["Change"].mean().reset_index()
+    sector_summary = sector_summary.sort_values(by="Change", ascending=False)
+
+    # Clean the primary table display by removing raw change column used for sector calculations
+    display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "Action"]]
+
     # --- 📊 FOUR-COLUMN EXTENSIVE DESIGN LAYOUT ---
     # Width distribution proportions: Master table 50%, Buy 16%, Sell 16%, Sectors 18%
     col_master, col_buy, col_sell, col_sectors = st.columns([0.50, 0.16, 0.16, 0.18])
@@ -125,7 +130,7 @@ if not results_df.empty:
     # Column 1: Master Full F&O Tracker (Left Side)
     with col_master:
         st.subheader("🔍 Complete F&O Watchlist")
-        st.dataframe(all_sorted, use_container_width=True, hide_index=True)
+        st.dataframe(display_master_df, use_container_width=True, hide_index=True)
 
     # Column 2: Buy Side Box Panel (Middle Left)
     with col_buy:
@@ -150,12 +155,12 @@ if not results_df.empty:
         st.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div>", unsafe_allow_html=True)
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Format styled list values into individual color-coded rows inside the panel
-        for _, row in sector_df.iterrows():
+        # Render the natively computed sectors inside the right-hand container box
+        for _, row in sector_summary.iterrows():
             name = row["Sector"]
-            change = row["Change (%)"]
+            change = round(row["Change"], 2)
             
-            # Dynamic cyan/red indicator font text values based on status
+            # Apply color templates
             color = "#29b5e8" if change >= 0 else "#ff4b4b"
             sign = "+" if change >= 0 else ""
             
@@ -164,6 +169,7 @@ if not results_df.empty:
                 f"<span style='font-size: 13px; font-weight: 500;'>{name}</span>"
                 f"<span style='float: right; font-weight: bold; color: {color};'>{sign}{change}%</span>"
                 f"</div>", 
+                with_html=True if 'with_html' in dir(st.markdown) else None, # Compatibility safe check
                 unsafe_allow_html=True
             )
 else:

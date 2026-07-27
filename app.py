@@ -2,12 +2,12 @@ import streamlit as st
 import pandas as pd
 from tradingview_ta import get_multiple_analysis, TA_Handler, Interval
 
-# Page setup configuration for broad 4-column institutional layout
-st.set_page_config(page_title="NSE F&O Dashboard", layout="wide")
+# Configure broad wide container parameters
+st.set_page_config(page_title="NSE F&O Institutional Dashboard", layout="wide")
 st.title("📈 NSE F&O Institutional Strategy Dashboard")
 st.write("Scans NSE F&O segments on the Daily (1D) Timeframe using unblocked indicator engines.")
 
-# Standardized high-liquidity F&O Ticker list formatted for TradingView's NSE Exchange routing
+# High-liquidity F&O Ticker list formatted for TradingView's NSE routing
 FO_TICKERS = [
     "NSE:ACC", "NSE:AARTIIND", "NSE:ABB", "NSE:ADANIENT", "NSE:ADANIPORTS", "NSE:APOLLOHOSP", 
     "NSE:ASIANPAINT", "NSE:AXISBANK", "NSE:BAJAJ_AUTO", "NSE:BAJFINANCE", "NSE:BAJAJFINSV", 
@@ -28,7 +28,8 @@ FO_TICKERS = [
     "NSE:TCS", "NSE:TECHM", "NSE:TITAN", "NSE:TORNTPHARM", "NSE:TRENT", "NSE:TVSMOTOR", 
     "NSE:ULTRACEMCO", "NSE:UPL", "NSE:VEDL", "NSE:VOLTAS", "NSE:WIPRO", "NSE:ZEEL"
 ]
-# Structural Lookup mapping tickers to their respective indices
+
+# Master dictionary mapping stock tickers natively to their respective indexes
 TICKER_SECTORS = {
     "ACC": "🏗️ MATERIALS", "AARTIIND": "💊 PHARMA", "ABB": "🏗️ MATERIALS", "ADANIENT": "⚡ ENERGY", "ADANIPORTS": "⚡ ENERGY", "APOLLOHOSP": "💊 PHARMA",
     "ASIANPAINT": "🛒 FMCG", "AXISBANK": "🏦 BANKING", "BAJAJ_AUTO": "🚗 AUTO", "BAJFINANCE": "🏦 BANKING", "BAJAJFINSV": "🏦 BANKING",
@@ -77,7 +78,6 @@ def scan_markets_bulk_tv():
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_row(ticker_clean):
-    # Fixed: Swapped hidden script variables with unblocked EMA and RSI indicators to unlock real-time tracking
     timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
     st_row = {"Stock Name": ticker_clean}
     query_ticker = ticker_clean.replace("&", "_")
@@ -85,27 +85,18 @@ def get_supertrend_row(ticker_clean):
         try:
             handler = TA_Handler(family="standard", symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
             analysis = handler.get_analysis()
-            inds = analysis.indicators
             
-            # Extract standard, fully accessible TradingView library indicators natively
-            close_val = float(inds.get("close", 0.0))
-            ema10 = float(inds.get("EMA10", 0.0))
-            ema20 = float(inds.get("EMA20", 0.0))
-            rsi_val = float(inds.get("RSI", 50.0))
-            
-            # Real-Time Confluence Logic: Determines bull vs bear trends cleanly across all time scales
-            if close_val > ema10 and ema10 > ema20 and rsi_val > 50.0:
-                st_row[label] = "🟢 BULLISH"
-            elif close_val < ema10 and ema10 < ema20 and rsi_val < 50.0:
-                st_row[label] = "🔴 BEARISH"
-            elif close_val > ema20:
-                st_row[label] = "🟢 BULLISH"
+            # Directly pulls the native summary score consensus from TradingView to ensure dots are completely dynamic
+            rec = analysis.summary.get("RECOMMENDATION", "")
+            if "BUY" in rec:
+                st_row[label] = "🟢"
+            elif "SELL" in rec:
+                st_row[label] = "🔴"
             else:
-                st_row[label] = "🔴 BEARISH"
+                st_row[label] = "⚪"
         except: 
-            st_row[label] = "⚪ NEUTRAL"
+            st_row[label] = "⚪"
     return pd.DataFrame([st_row])
-
 
 if st.button("🔄 Refresh Scanner Data", type="primary"): st.cache_data.clear()
 
@@ -119,63 +110,48 @@ if not results_df.empty:
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean().dropna().sort_values(by="Change", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
-    col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
+    # --- 📊 MASTER TWO-COLUMN MAIN DIVISION LAYOUT ---
+    col_left_watchlist, col_right_dashboard = st.columns([0.48, 0.52])
 
-    # Column 1: Watchlist (Captures user checkbox actions interactively)
-    col_master.subheader("🔍 Complete F&O Watchlist")
-    selected_row = col_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
+    # Left Column (50% Split): Complete Master F&O List
+    col_left_watchlist.subheader("🔍 Complete F&O Watchlist")
+    selected_row = col_left_watchlist.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 
-    # --- 🎯 MOVED TO TOP: CONDENSED PANELS SECTION (RED HIGHLIGHTED AREA) ---
-    col_buy.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
+    # Right Column Top Section: Squeezed Multi-Timeframe Matrix Row
+    col_right_dashboard.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
     
-    # Selection mapping: Fixed! Extracted the clean text value string out of the numerical index list array safely
+    # Selection Handler: Pulls the pure string row token, completely wiping out the pandas Series error
     sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
-    
-    # Extracts only the raw text name string, discarding metadata labels entirely
-    active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"]) if (sel_rows and len(sel_rows) > 0) else "ACC"
+    active_ticker = "ACC"
+    if sel_rows and len(sel_rows) > 0:
+        active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"])
 
-    with col_buy.spinner(f"Updating trend for {active_ticker}..."): 
+    with col_right_dashboard.spinner(f"Analyzing {active_ticker}..."): 
         st_matrix_df = get_supertrend_row(active_ticker)
         
-    def format_to_pure_dots(val):
-        if 'BULLISH' in str(val): return '🟢'
-        if 'BEARISH' in str(val): return '🔴'
-        if 'Stock Name' in str(val) or val == active_ticker: return str(val)
-        return '⚪'
-        
-    def style_cells(v):
-        if '🟢' in str(v): return 'background-color: rgba(41, 181, 232, 0.1); color: #29b5e8; font-weight: bold;'
-        if '🔴' in str(v): return 'background-color: rgba(255, 75, 75, 0.1); color: #ff4b4b; font-weight: bold;'
-        return ''
-        
     if not st_matrix_df.empty:
-        condensed_dots_df = st_matrix_df.map(format_to_pure_dots)
-        col_buy.dataframe(condensed_dots_df, use_container_width=True, hide_index=True)
+        col_right_dashboard.dataframe(st_matrix_df, use_container_width=True, hide_index=True)
     else:
-        col_buy.info("No trend data loaded.")
+        col_right_dashboard.info("No trend data loaded.")
         
-    col_buy.markdown("---")
+    col_right_dashboard.markdown("---")
 
-    # Column 2: Buy Side Box
-    col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
+    # Right Column Lower Section: Initialize sub-columns strictly inside the right-hand panel
+    sub_col_buy, sub_col_sell, sub_col_sectors = col_right_dashboard.columns([0.33, 0.33, 0.34])
+
+    sub_col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
     if len(buy_df) > 0:
-        col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
+        sub_col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
     else:
-        col_buy.info("No stocks down.")
+        sub_col_buy.info("No stocks down.")
 
-    # Column 3: Sell Side Box (No duplicate duplicates remain here)
-    col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
+    sub_col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:
-        col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
+        sub_col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
     else:
-        col_sell.info("No stocks pumped.")
+        sub_col_sell.info("No stocks pumped.")
 
-
-
-
-
-        # Balanced Right Container Layout: Sector mappings routed cleanly into sub_col_sectors
+    # Sub-columns integration: Sector tracking mapped inside sub_col_sectors to remove the NameError crash
     sub_col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)
     for _, row in sector_summary.iterrows():
         color = "#29b5e8" if row["Change"] >= 0 else "#ff4b4b"
@@ -183,4 +159,3 @@ if not results_df.empty:
         sub_col_sectors.markdown(f"<div style='padding: 6px; margin-bottom: 4px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px;'><span style='font-size: 11px;'>{row['Sector']}</span><span style='float: right; font-weight: bold; font-size: 11px; color: {color};'>{sign}{round(row['Change'],2)}%</span></div>", unsafe_allow_html=True)
 else:
     st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")
-

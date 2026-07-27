@@ -106,27 +106,52 @@ if not results_df.empty:
     sector_summary = all_sorted.groupby("Sector", as_index=False)["Change"].mean().dropna().sort_values(by="Change", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
-    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
-    # The columns are defined first so we can route the click data to the right column immediately
-    col_master, col_buy, col_sell, col_sectors = st.columns([0.46, 0.17, 0.17, 0.20])
+    # --- 🎯 MOVED TO TOP: CONDENSED PANELS SECTION (RED HIGHLIGHTED AREA) ---
+    st.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
+    st.caption("💡 Pro-Tip: Click on any stock row in the 'Complete F&O Watchlist' table below to instantly load its SuperTrend statuses.")
+    
+    # Safe Extraction Layer: Captures the clean string ticker name of your selected row click
+    sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
+    active_ticker = "ACC"
+    if sel_rows and len(sel_rows) > 0:
+        active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"])
 
-    # Column 1: Watchlist (on_select is placed right here)
+    with st.spinner(f"Updating trend for {active_ticker}..."): 
+        st_matrix_df = get_supertrend_row(active_ticker)
+        
+    # Clean Radio Dots: Swaps text words with pure color circles to maximize space saving
+    def format_to_pure_dots(val):
+        if 'BULLISH' in str(val): return '🟢'
+        if 'BEARISH' in str(val): return '🔴'
+        if 'Stock Name' in str(val) or val == active_ticker: return str(val)
+        return '⚪'
+        
+    if not st_matrix_df.empty:
+        condensed_dots_df = st_matrix_df.map(format_to_pure_dots)
+        st.dataframe(condensed_dots_df, use_container_width=True, hide_index=True)
+    else:
+        st.info("No trend data loaded.")
+        
+    st.markdown("---")
+
+    # --- 📊 MASTER FOUR-COLUMN SPACE BOUNDARIES GRID ---
+    col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
+
     col_master.subheader("🔍 Complete F&O Watchlist")
     selected_row = col_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 
-    # Column 2: Buy Side Box
     col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
     if len(buy_df) > 0:
         col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
     else:
         col_buy.info("No stocks down.")
 
-    # Column 3: Sell Side Box
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:
         col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
     else:
         col_sell.info("No stocks pumped.")
+
 
 
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)

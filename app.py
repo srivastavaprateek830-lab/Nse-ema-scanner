@@ -30,6 +30,7 @@ FO_TICKERS = [
 ]
 
 # Master dictionary mapping stock tickers natively to their respective indexes
+# Master dictionary mapping stock tickers natively to their respective indices
 TICKER_SECTORS = {
     "ACC": "🏗️ MATERIALS", "AARTIIND": "💊 PHARMA", "ABB": "🏗️ MATERIALS", "ADANIENT": "⚡ ENERGY", "ADANIPORTS": "⚡ ENERGY", "APOLLOHOSP": "💊 PHARMA",
     "ASIANPAINT": "🛒 FMCG", "AXISBANK": "🏦 BANKING", "BAJAJ_AUTO": "🚗 AUTO", "BAJFINANCE": "🏦 BANKING", "BAJAJFINSV": "🏦 BANKING",
@@ -80,23 +81,27 @@ def scan_markets_bulk_tv():
 def get_supertrend_row(ticker_clean):
     timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
     st_row = {"Stock Name": ticker_clean}
+    # TradingView symbol routing requires standard underscores instead of ampersands
     query_ticker = ticker_clean.replace("&", "_")
     for label, tf in timeframes.items():
         try:
             handler = TA_Handler(family="standard", symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
             analysis = handler.get_analysis()
             
-            # Directly pulls the native summary score consensus from TradingView to ensure dots are completely dynamic
-            rec = analysis.summary.get("RECOMMENDATION", "")
-            if "BUY" in rec:
+            # Robust extraction layer checking summary counts to prevent stuck grey states
+            buys = int(analysis.summary.get("BUY", 0))
+            sells = int(analysis.summary.get("SELL", 0))
+            
+            if buys > sells:
                 st_row[label] = "🟢"
-            elif "SELL" in rec:
+            elif sells > buys:
                 st_row[label] = "🔴"
             else:
                 st_row[label] = "⚪"
         except: 
             st_row[label] = "⚪"
     return pd.DataFrame([st_row])
+
 
 if st.button("🔄 Refresh Scanner Data", type="primary"): st.cache_data.clear()
 

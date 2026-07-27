@@ -2,17 +2,16 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import requests
-import time
 
 # Fix for Yahoo Finance cache location on Streamlit servers
 yf.set_tz_cache_location("/tmp/yf_cache")
 
-# Set up page configuration
-st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
-st.title("📈 NSE F&O EMA20 Deviation Scanner")
-st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
+# Set up page configuration for an executive layout
+st.set_page_config(page_title="NSE F&O Analytics Dashboard", page_icon="📈", layout="wide")
+st.title("📊 NSE F&O Strategy Dashboard")
+st.markdown("Monitors prominent NSE derivatives and routes extreme price expansions away from moving average baselines.")
 
-# Curated list of prominent NSE F&O Tickers
+# Comprehensive list of liquid F&O Tickers
 FO_TICKERS = [
     "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
     "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
@@ -34,33 +33,24 @@ FO_TICKERS = [
     "ULTRACEMCO.NS", "UPL.NS", "VEDL.NS", "VOLTAS.NS", "WIPRO.NS", "ZEEL.NS"
 ]
 
-@st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain speed
+@st.cache_data(ttl=600)  # Maintain standard 10-minute caching layer
 def scan_markets():
     scanned_data = []
     
+    # Establish persistent header session properties to look like a desktop web browser
     session = requests.Session()
     session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     })
     
-    tickers_str = " ".join(FO_TICKERS)
-    
-    # Anti-Throttling Strategy: Try downloading up to 3 times to get past cloud IP drops
-    data = pd.DataFrame()
-    for attempt in range(3):
-        try:
-            data = yf.download(tickers_str, period="3mo", interval="1d", group_by="ticker", progress=False, session=session)
-            if not data.empty:
-                break
-        except Exception:
-            time.sleep(1) # Soft pause before retrying
-            
-    if data.empty:
-        return pd.DataFrame()
+    # Bundle into an initialized collection structure to separate individual downloads safely
+    tickers_wrapper = yf.Tickers(" ".join(FO_TICKERS), session=session)
     
     for ticker in FO_TICKERS:
         try:
-            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
+            # Safely fetch individual historical data arrays to bypass cloud blocks
+            df = tickers_wrapper.tickers[ticker].history(period="3mo", interval="1d", progress=False)
+            
             if df.empty or len(df) < 20:
                 continue
                 
@@ -85,7 +75,7 @@ def scan_markets():
                 "Deviation (%)": round(deviation, 2),
                 "Action": action
             })
-        except Exception:
+        except:
             continue
             
     return pd.DataFrame(scanned_data)
@@ -94,60 +84,60 @@ def scan_markets():
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Scanning NSE F&O segment..."):
+with st.spinner("Streaming stable market vectors... Please wait."):
     results_df = scan_markets()
 
 if not results_df.empty:
-    # Sort data by largest deviation
+    # Sort total values cleanly by extreme deviations
     all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     
-    # Extract clean buy and sell tables
+    # Filter specific targets for the right-hand action buckets
     buy_box_df = all_sorted[all_sorted["Deviation (%)"] <= -10][["Ticker", "Price (₹)", "Deviation (%)"]]
     sell_box_df = all_sorted[all_sorted["Deviation (%)"] >= 10][["Ticker", "Price (₹)", "Deviation (%)"]]
 
-    # --- 📈 INTERACTIVE TREND PREVIEW WINDOW ---
-    st.markdown("### 📈 Historical Trend Explorer")
-    selected_ticker = st.selectbox("🎯 Choose any stock to instantly plot its price vs EMA20 line graph:", sorted(all_sorted["Ticker"].unique()))
+    # --- 📈 LIVE TREND EXPLORER ---
+    st.markdown("### 📈 Live Trend Chart View")
+    selected_ticker = st.selectbox("🎯 Select a stock from the dropdown to instantly map its price trend vs EMA20:", sorted(all_sorted["Ticker"].unique()))
     
     if selected_ticker:
         try:
-            # Safely fetch historical pricing array for chart visualization
+            # Fetch historical pricing array for chart visualization
             chart_df = yf.download(f"{selected_ticker}.NS", period="3mo", interval="1d", progress=False)
             if not chart_df.empty:
                 chart_df['EMA20 Line'] = chart_df['Close'].ewm(span=20, adjust=False).mean()
                 plot_data = pd.DataFrame({'Close Price': chart_df['Close'], 'EMA20 Baseline': chart_df['EMA20 Line']}, index=chart_df.index)
                 st.line_chart(plot_data, y=["Close Price", "EMA20 Baseline"])
         except Exception:
-            st.caption("Chart pipeline briefly occupied. Select another ticker or try again.")
+            st.caption("Chart data feed busy. Select another symbol.")
 
     st.markdown("---")
 
-    # --- 📊 MULTI-COLUMN DESIGN LAYOUT ---
-    left_col, right_col = st.columns([3, 2]) # Split workspace: 60% Left, 40% Right
+    # --- 📊 TWO-COLUMN USER INTERFACE LAYOUT ---
+    left_col, right_col = st.columns([3, 2]) # 60% Width Left side, 40% Width Right side
 
-    # Left Column Workspace: Master Watchlist Frame
+    # Left Column Workspace: Master Watchlist Data Grid
     with left_col:
         st.subheader("🔍 Complete F&O Watchlist Deviation")
         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
 
-    # Right Column Workspace: Action Target Containers
+    # Right Column Workspace: Action Signal Box Targets
     with right_col:
         st.subheader("🛒 Breakout Target Buckets")
         
-        # Top Box Layer: Dynamic Buy Routing Panel
+        # Upper Container Element: Dynamic Buy Routing Panel Box
         st.markdown("<div style='background-color: rgba(255, 75, 75, 0.15); padding: 12px; border-radius: 6px; border-left: 5px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (Deviation &lt; -10%)</div>", unsafe_allow_html=True)
         if not buy_box_df.empty:
             st.dataframe(buy_box_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No stocks are currently showing a buy signal below -10%.")
+            st.info("No stocks currently meet the -10% buy threshold criteria.")
             
         st.markdown("<br>", unsafe_allow_html=True)
         
-        # Bottom Box Layer: Dynamic Sell Routing Panel
+        # Lower Container Element: Dynamic Sell Routing Panel Box
         st.markdown("<div style='background-color: rgba(41, 181, 232, 0.15); padding: 12px; border-radius: 6px; border-left: 5px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (Deviation &gt; +10%)</div>", unsafe_allow_html=True)
         if not sell_box_df.empty:
             st.dataframe(sell_box_df, use_container_width=True, hide_index=True)
         else:
-            st.info("No stocks are currently showing a sell signal above +10%.")
+            st.info("No stocks currently meet the +10% sell threshold criteria.")
 else:
-    st.error("Yahoo's API network gate closed. Click 'Refresh Scanner Data' to cycle your cloud connection pipeline.")
+    st.error("Market data pipeline empty. Click the Refresh button above to retry the server connection.")

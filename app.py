@@ -6,23 +6,12 @@ import requests
 # Fix for Yahoo Finance cache location on Streamlit servers
 yf.set_tz_cache_location("/tmp/yf_cache")
 
-# Professional dashboard display options
-st.set_page_config(page_title="NSE F&O Analytics Dashboard", page_icon="📈", layout="wide")
+# Set up page configuration
+st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
+st.title("📈 NSE F&O EMA20 Deviation Scanner")
+st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
 
-# --- SIDEBAR CONTROLS ---
-with st.sidebar:
-    st.markdown("### ⚙️ Scanner Options")
-    st.write("Click below to manual flush the cache window and fetch raw market updates.")
-    # Manual data refresh button isolated to the side panel
-    if st.button("🔄 Refresh Scanner Data", type="primary", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
-
-# --- MAIN DASHBOARD INTERFACE ---
-st.title("📊 NSE F&O Strategy Dashboard")
-st.markdown("This tracker highlights extreme price expansion signals away from daily moving average baselines.")
-
-# Comprehensive list of active liquid NSE F&O Tickers
+# List of 100+ prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
 FO_TICKERS = [
     "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
     "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
@@ -61,7 +50,7 @@ def scan_markets():
     for ticker in FO_TICKERS:
         try:
             # Extract ticker specific dataframe safely
-            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
+            df = data[ticker].dropna() if ticker in data.columns.levels[0] else pd.DataFrame()
             if df.empty or len(df) < 20:
                 continue
                 
@@ -96,57 +85,45 @@ def scan_markets():
             
     return pd.DataFrame(scanned_data)
 
-with st.spinner("Streaming security metrics from market channels... Please wait."):
+# One-click manual refresh button
+if st.button("🔄 Refresh Scanner Data", type="primary"):
+    st.cache_data.clear()
+
+with st.spinner("Scanning NSE F&O segment... This takes a few seconds."):
     results_df = scan_markets()
 
 if not results_df.empty:
-    # Sort absolute deviations largest to smallest
-    all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
+    # Filter for signals matching your criteria
+    filtered_df = results_df[results_df["Deviation (%)"].abs() >= 10]
     
-    # Route matching entries cleanly to target action buckets
-    buy_box_df = all_sorted[all_sorted["Deviation (%)"] <= -10][["Ticker", "Price (₹)", "Deviation (%)"]]
-    sell_box_df = all_sorted[all_sorted["Deviation (%)"] >= 10][["Ticker", "Price (₹)", "Deviation (%)"]]
-
-    # --- 📈 INTEGRATED TREND CHART ENGINE ---
-    st.markdown("### 📈 Historical Trend Visualizer")
-    selected_ticker = st.selectbox("🎯 Select any active symbol from the dropdown to instantly view its close trend against the EMA20:", sorted(all_sorted["Ticker"].unique()))
+    # Sort by the absolute largest deviation
+    filtered_df = filtered_df.reindex(filtered_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     
-    if selected_ticker:
-        try:
-            chart_df = yf.download(f"{selected_ticker}.NS", period="3mo", interval="1d", progress=False)
-            if not chart_df.empty:
-                chart_df['EMA20 Line'] = chart_df['Close'].ewm(span=20, adjust=False).mean()
-                plot_data = pd.DataFrame({'Close Price': chart_df['Close'], 'EMA20 Baseline': chart_df['EMA20 Line']}, index=chart_df.index)
-                st.line_chart(plot_data, y=["Close Price", "EMA20 Baseline"])
-        except Exception:
-            st.caption("Data lines for this symbol are busy right now. Try selecting a different asset.")
-
-    st.markdown("---")
-
-    # --- 📊 MULTI-COLUMN DESIGN WORKSPACE ---
-    left_col, mid_col, right_col = st.columns([0.6, 0.2, 0.2]) # Splits viewport: 60% Master table, 20% Buy panel, 20% Sell panel
-
-    # 1. Column Frame: Full Master Table (60% Width)
-    with left_col:
-        st.subheader("🔍 Complete F&O Watchlist Deviation")
+    # Display Key Statistics Cards
+    buy_count = len(filtered_df[filtered_df["Deviation (%)"] <= -10])
+    sell_count = len(filtered_df[filtered_df["Deviation (%)"] >= 10])
+    
+    col1, col2 = st.columns(2)
+    col1.metric("Total BUY Signals (< -10%)", buy_count)
+    col2.metric("Total SELL Signals (> +10%)", sell_count)
+    
+    st.subheader("🎯 Triggered Trading Signals")
+    if not filtered_df.empty:
+        st.dataframe(
+            filtered_df.style.map(
+                lambda val: 'background-color: #ffcccc; color: black;' if 'BUY' in str(val) 
+                else ('background-color: #ccffcc; color: black;' if 'SELL' in str(val) else ''),
+                subset=['Action']
+            ), 
+            use_container_width=True,
+            hide_index=True
+        )
+    else:
+        st.info("No stocks currently show a deviation greater than 10% from the EMA20.")
+        
+    # Section to look at all stocks anyway
+    with st.expander("🔍 View Complete F&O Watchlist Deviation"):
+        all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
-
-    # 2. Column Frame: Dedicated Buy Alerts Box (20% Width)
-    with mid_col:
-        st.markdown("<div style='background-color: rgba(255, 75, 75, 0.15); padding: 12px; border-radius: 6px; border-left: 5px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&lt; -10%)</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        if not buy_box_df.empty:
-            st.dataframe(buy_box_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("Empty panel. No entities match criteria.")
-
-    # 3. Column Frame: Dedicated Sell Alerts Box (20% Width)
-    with right_col:
-        st.markdown("<div style='background-color: rgba(41, 181, 232, 0.15); padding: 12px; border-radius: 6px; border-left: 5px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&gt; +10%)</div>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True)
-        if not sell_box_df.empty:
-            st.dataframe(sell_box_df, use_container_width=True, hide_index=True)
-        else:
-            st.info("Empty panel. No entities match criteria.")
 else:
-    st.error("Market data pipeline empty. Yahoo blocked the connection request. Click the Refresh button on the left sidebar to try again.")
+    st.error("Failed to retrieve market data. Try clicking the Refresh button above.")

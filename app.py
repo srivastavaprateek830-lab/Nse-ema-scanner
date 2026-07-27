@@ -198,13 +198,13 @@ if not results_df.empty:
         "15 Min": min15_trend
     }])
 
+    # Fixed: Re-aligned text coloring lambda functions to be completely indentation safe
+    def style_supertrend_cells(val):
+        if 'BULLISH' in str(val):
+            return 'background-color: rgba(41, 181, 232, 0.2); color: #29b5e8; font-weight: bold;'
+        elif 'BEARISH' in str(val):
+            return 'background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;'
+        else:
+            return ''
+
     st.dataframe(
-        st_matrix_df.style.map(
-            lambda val: 'background-color: rgba(41, 181, 232, 0.2); color: #29b5e8; font-weight: bold;' if 'BULLISH' in str(val)
-            else ('background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;' if 'BEARISH' in str(val) else ''),
-            subset=['Weekly', 'Daily', 'Hourly', '15 Min']
-        ),
-        use_container_width=True,
-        hide_index=True
-    )
-else:

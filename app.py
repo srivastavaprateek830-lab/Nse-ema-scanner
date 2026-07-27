@@ -56,26 +56,36 @@ def scan_markets_native_tv():
     scanned_data = []
     try:
         url = "https://tradingview.com"
+        # Institutional format structure required by TradingView's API backend
         payload = {
-            "symbols": {"tickers": [f"NSE:{t}" for t in FO_TICKERS], "query": {"types": []}},
-            "columns": ["close", "EMA20", "change", "RSI"]
+            "filter": [{"left": "name", "operation": "in", "right": [f"NSE:{t}" for t in FO_TICKERS]}],
+            "options": {"lang": "en"},
+            "markets": ["india"],
+            "symbols": {"query": {"types": []}, "tickers": []},
+            "columns": ["name", "close", "EMA20", "change", "RSI"],
+            "sort": {"sortBy": "name", "sortOrder": "asc"},
+            "range": [0, 150]
         }
-        res = requests.post(url, json=payload, headers={'User-Agent': 'Mozilla/5.0'}, timeout=15)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Origin': 'https://tradingview.com',
+            'Referer': 'https://tradingview.com/'
+        }
+        res = requests.post(url, json=payload, headers=headers, timeout=15)
         if res.status_code == 200:
             json_data = res.json().get('data', [])
             for item in json_data:
-                ticker = item.get('s', '').split(':')[-1]
                 metrics = item.get('d', [])
-                
-                # Fixed: Properly unpacked columns by accessing specific list array indices safely
-                if len(metrics) >= 4:
-                    current_price = float(metrics[0]) if metrics[0] is not None else 0.0
-                    current_ema20 = float(metrics[1]) if metrics[1] is not None else 0.0
-                    day_change = float(metrics[2]) if metrics[2] is not None else 0.0
-                    rsi14 = float(metrics[3]) if metrics[3] is not None else 50.0
+                if len(metrics) >= 5:
+                    ticker = metrics[0]
+                    current_price = float(metrics[1]) if metrics[1] is not None else 0.0
+                    current_ema20 = float(metrics[2]) if metrics[2] is not None else 0.0
+                    day_change = float(metrics[3]) if metrics[3] is not None else 0.0
+                    rsi14 = float(metrics[4]) if metrics[4] is not None else 50.0
                     
                     if current_price == 0.0 or current_ema20 == 0.0:
                         continue
+                        
                     deviation = ((current_price - current_ema20) / current_ema20) * 100
                     action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
                     
@@ -89,7 +99,7 @@ def scan_markets_native_tv():
                         "Change": day_change
                     })
     except Exception as e:
-        pass
+        st.error(f"Data Fetch Error: {str(e)}")
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_matrix_native(ticker_clean):
@@ -98,13 +108,23 @@ def get_supertrend_matrix_native(ticker_clean):
     query_ticker = ticker_clean.replace("&", "_")
     
     url = "https://tradingview.com"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Origin': 'https://tradingview.com',
+        'Referer': 'https://tradingview.com/'
+    }
+    
     for label, tf in timeframes.items():
         try:
             payload = {
-                "symbols": {"tickers": [f"NSE:{query_ticker}"], "query": {"types": []}},
-                "columns": [f"Supertrend.lower|{tf}", f"Supertrend.upper|{tf}", f"close|{tf}"]
+                "filter": [{"left": "name", "operation": "equal", "right": f"NSE:{query_ticker}"}],
+                "options": {"lang": "en"},
+                "markets": ["india"],
+                "symbols": {"query": {"types": []}, "tickers": []},
+                "columns": [f"Supertrend.lower|{tf}", f"Supertrend.upper|{tf}", f"close|{tf}"],
+                "range": [0, 1]
             }
-            res = requests.post(url, json=payload, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
+            res = requests.post(url, json=payload, headers=headers, timeout=5)
             if res.status_code == 200:
                 data_block = res.json().get('data', [])
                 if data_block:
@@ -140,11 +160,3 @@ if not results_df.empty:
     col_master, col_buy, col_sell, col_sectors = st.columns([0.48, 0.17, 0.17, 0.18])
 
     col_master.subheader("🔍 Complete F&O Watchlist")
-    selected_row = col_master.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
-
-    col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div>", unsafe_allow_html=True)
-    col_buy.markdown("<br>", unsafe_allow_html=True)
-    col_buy.dataframe(buy_signals_df, use_container_width=True, hide_index=True) if not buy_signals_df.empty else col_buy.info("No stocks meet strict -10% buy deviation.")
-
-    col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div>", unsafe_allow_html=True)
-    col_sell.markdown("<br>", unsafe_allow_html=True)

@@ -33,6 +33,18 @@ FO_TICKERS = [
     "ULTRACEMCO.NS", "UPL.NS", "VEDL.NS", "VOLTAS.NS", "WIPRO.NS", "ZEEL.NS"
 ]
 
+# Standard Dictionary Mapping Major Nifty Sectors to their official Yahoo Index Tickers
+SECTOR_MAP = {
+    "🏦 BANKING": "^NSEBANK",
+    "💻 IT SECTOR": "^CNXIT",
+    "🚗 AUTOMOBILE": "^CNXAUTO",
+    "💊 PHARMACEUTICALS": "^CNXPHARMA",
+    "🛒 FMCG DEFENSIVE": "^CNXFMCG",
+    "🏗️ METALS & MINING": "^CNXMETAL",
+    "🏢 REAL ESTATE": "^CNXREALTY",
+    "⚡ ENERGY & UTILITIES": "^CNXENERGY"
+}
+
 @st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain speed
 def scan_markets():
     scanned_data = []
@@ -50,7 +62,7 @@ def scan_markets():
     for ticker in FO_TICKERS:
         try:
             # Extract ticker specific dataframe safely
-            df = data[ticker].dropna() if ticker in data.columns.levels[0] else pd.DataFrame()
+            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
             if df.empty or len(df) < 20:
                 continue
                 
@@ -85,12 +97,59 @@ def scan_markets():
             
     return pd.DataFrame(scanned_data)
 
+@st.cache_data(ttl=600)
+def fetch_sector_performance():
+    """Independent function fetching broad sector performance metrics."""
+    sector_perf = {}
+    session = requests.Session()
+    session.headers.update({'User-Agent': 'Mozilla/5.0'})
+    
+    try:
+        # Download immediate daily status for Nifty Index sectors
+        symbols = list(SECTOR_MAP.values())
+        sec_data = yf.download(" ".join(symbols), period="5d", interval="1d", progress=False, session=session)
+        
+        for name, sym in SECTOR_MAP.items():
+            if sym in sec_data.columns.levels[1]:
+                close_series = sec_data['Close'][sym].dropna()
+                if len(close_series) >= 2:
+                    today_close = close_series.iloc[-1]
+                    prev_close = close_series.iloc[-2]
+                    day_change = ((today_close - prev_close) / prev_close) * 100
+                    sector_perf[name] = round(day_change, 2)
+    except:
+        pass
+    return sector_perf
+
 # One-click manual refresh button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Scanning NSE F&O segment... This takes a few seconds."):
+with st.spinner("Scanning NSE F&O segment and Sectoral matrix..."):
     results_df = scan_markets()
+    sector_data = fetch_sector_performance()
+
+# --- 📊 SECTOR PERFORMANCE TRACKER HEADER ---
+if sector_data:
+    st.write("---")
+    st.subheader("⚡ Nifty Live Sectoral Performance Tracker")
+    st.write("Cross-reference your stock picks with these leading macro-trends to ensure sector confluence.")
+    
+    # Render all 8 major sectors cleanly inside a horizontal grid array
+    sec_cols = st.columns(len(sector_data))
+    for i, (sec_name, change) in enumerate(sorted(sector_data.items(), key=lambda x: x[1], reverse=True)):
+        with sec_cols[i]:
+            # Apply dynamic color coding: Green for positive momentum, Red for weakness
+            box_style = "border-top: 4px solid #29b5e8; background-color: rgba(41,181,232,0.05);" if change >= 0 else "border-top: 4px solid #ff4b4b; background-color: rgba(255,75,75,0.05);"
+            display_val = f"+{change}%" if change >= 0 else f"{change}%"
+            st.markdown(
+                f"<div style='{box_style} padding: 10px; border-radius: 4px; text-align: center; border-inline: 1px solid rgba(128,128,128,0.2); border-bottom: 1px solid rgba(128,128,128,0.2);'>"
+                f"<span style='font-size: 11px; font-weight: bold; color: gray;'>{sec_name}</span><br>"
+                f"<span style='font-size: 18px; font-weight: bold;'>{display_val}</span>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
+    st.write("---")
 
 if not results_df.empty:
     # Sort entire master list by absolute largest deviation right away

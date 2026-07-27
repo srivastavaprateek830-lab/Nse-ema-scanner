@@ -109,14 +109,14 @@ if not results_df.empty:
     # --- 🎯 TOP CONPLAY CONDENSED PANELS SECTION ---
     st.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
     
-    # Selection mapping: Extracting the clean raw text string values to fix the metadata typo
+    # Safe fallback extraction: Resolves the Series text array data type printing bug completely
     sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
-    active_ticker = str(display_master_df.iloc[sel_rows]["Ticker"].values[0]) if sel_rows else "ACC"
+    active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"]) if (sel_rows and len(sel_rows) > 0) else "ACC"
 
     with st.spinner(f"Updating trend for {active_ticker}..."): 
         st_matrix_df = get_supertrend_row(active_ticker)
         
-    # Formatting function: Swaps words with condensed indicator buttons cleanly
+    # Formatting function: Swaps words with clean visual indicator buttons
     def format_to_color_dots(val):
         if 'BULLISH' in str(val): return '🟢 BUY'
         if 'BEARISH' in str(val): return '🔴 SELL'
@@ -129,8 +129,8 @@ if not results_df.empty:
         return ''
         
     if not st_matrix_df.empty:
-        # Map values to dots first, then apply cell highlights to create the condensed card row
-        styled_dots_df = st_matrix_df.applymap(format_to_color_dots)
+        # Fixed: Changed deprecated .applymap() to modern .map() to bypass the Python environment crash
+        styled_dots_df = st_matrix_df.map(format_to_color_dots)
         st.dataframe(styled_dots_df.style.map(style_cells, subset=['Weekly', 'Daily', 'Hourly', '15 Min']), use_container_width=True, hide_index=True)
     else:
         st.info("No trend data loaded.")
@@ -148,6 +148,12 @@ if not results_df.empty:
         col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
     else:
         col_buy.info("No stocks down.")
+
+    col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
+    if len(sell_df) > 0:
+        col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
+    else:
+        col_sell.info("No stocks pumped.")
 
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:

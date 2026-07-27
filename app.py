@@ -55,17 +55,16 @@ TICKER_SECTORS = {
 def scan_markets_bulk_tv_native():
     scanned_data = []
     try:
-        # TradingView official unblocked scan endpoint
         url = "https://tradingview.com"
         
-        # Single bulk data schema payload format configuration
+        # Fixed: Added the compulsory 'range' dimensions payload array structure to satisfy TV servers
         payload = {
             "symbols": {"tickers": FO_TICKERS, "query": {"types": []}},
-            "columns": ["close", "EMA20", "change", "RSI"]
+            "columns": ["close", "EMA20", "change", "RSI"],
+            "range": [0, 150]
         }
         headers = {'User-Agent': 'Mozilla/5.0'}
         
-        # Execute single bulk network post
         res = requests.post(url, json=payload, headers=headers, timeout=15)
         if res.status_code == 200:
             json_data = res.json().get('data', [])
@@ -82,7 +81,6 @@ def scan_markets_bulk_tv_native():
                     if current_price == 0.0 or current_ema20 == 0.0:
                         continue
                         
-                    # Calculate deviation
                     deviation = ((current_price - current_ema20) / current_ema20) * 100
                     action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
                     
@@ -107,13 +105,13 @@ def get_supertrend_matrix_native(ticker_clean):
     url = "https://tradingview.com"
     headers = {'User-Agent': 'Mozilla/5.0'}
     
-    # Query all timeframes for the active single clicked stock efficiently
     tickers_list = [f"NSE:{query_ticker}"]
     for label, tf in timeframes.items():
         try:
             payload = {
                 "symbols": {"tickers": tickers_list, "query": {"types": []}},
-                "columns": [f"Supertrend.lower|{tf}", f"Supertrend.upper|{tf}", f"close|{tf}"]
+                "columns": [f"Supertrend.lower|{tf}", f"Supertrend.upper|{tf}", f"close|{tf}"],
+                "range": [0, 1]
             }
             res = requests.post(url, json=payload, headers=headers, timeout=5)
             if res.status_code == 200:

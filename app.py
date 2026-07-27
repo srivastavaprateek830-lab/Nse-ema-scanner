@@ -118,14 +118,14 @@ if not results_df.empty:
     # --- 📊 MASTER TWO-COLUMN MAIN DIVISION LAYOUT ---
     col_left_watchlist, col_right_dashboard = st.columns([0.48, 0.52])
 
-    # Left Column (50% Split): Complete Master F&O List
+    # Left Column (48% Split): Complete Master F&O List
     col_left_watchlist.subheader("🔍 Complete F&O Watchlist")
     selected_row = col_left_watchlist.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
 
     # Right Column Top Section: Squeezed Multi-Timeframe Matrix Row
     col_right_dashboard.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
     
-    # Selection Handler: Pulls the pure string row token, completely wiping out the pandas Series error
+    # Fixed String Parser: Extracts the singular string item by referencing index zero explicitly
     sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
     active_ticker = "ACC"
     if sel_rows and len(sel_rows) > 0:
@@ -155,6 +155,7 @@ if not results_df.empty:
         sub_col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
     else:
         sub_col_sell.info("No stocks pumped.")
+
 
     # Sub-columns integration: Sector tracking mapped inside sub_col_sectors to remove the NameError crash
     sub_col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)

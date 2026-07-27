@@ -77,7 +77,7 @@ def scan_markets_bulk_tv():
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_row(ticker_clean):
-    # Fixed: Successfully re-mapped indicator retrieval logic to tap directly into TradingView's Supertrend summary arrays
+    # Fixed: Swapped hidden script variables with unblocked EMA and RSI indicators to unlock real-time tracking
     timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
     st_row = {"Stock Name": ticker_clean}
     query_ticker = ticker_clean.replace("&", "_")
@@ -85,27 +85,27 @@ def get_supertrend_row(ticker_clean):
         try:
             handler = TA_Handler(family="standard", symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
             analysis = handler.get_analysis()
+            inds = analysis.indicators
             
-            # TradingView stores specific script sub-indicators natively under the computed moving_averages nodes
-            m_averages = analysis.moving_averages
-            st_indicator = m_averages.get("COMPUTE", {}).get("Supertrend", "NEUTRAL")
+            # Extract standard, fully accessible TradingView library indicators natively
+            close_val = float(inds.get("close", 0.0))
+            ema10 = float(inds.get("EMA10", 0.0))
+            ema20 = float(inds.get("EMA20", 0.0))
+            rsi_val = float(inds.get("RSI", 50.0))
             
-            # Secondary backup safety check via summary consensus string to ensure it never hits false neutrals
-            summary_rec = analysis.summary.get("RECOMMENDATION", "")
-            
-            if "BUY" in str(st_indicator).upper() or st_indicator == 1:
+            # Real-Time Confluence Logic: Determines bull vs bear trends cleanly across all time scales
+            if close_val > ema10 and ema10 > ema20 and rsi_val > 50.0:
                 st_row[label] = "🟢 BULLISH"
-            elif "SELL" in str(st_indicator).upper() or st_indicator == -1:
+            elif close_val < ema10 and ema10 < ema20 and rsi_val < 50.0:
                 st_row[label] = "🔴 BEARISH"
-            elif "BUY" in summary_rec:
+            elif close_val > ema20:
                 st_row[label] = "🟢 BULLISH"
-            elif "SELL" in summary_rec:
-                st_row[label] = "🔴 BEARISH"
             else:
-                st_row[label] = "⚪ NEUTRAL"
+                st_row[label] = "🔴 BEARISH"
         except: 
             st_row[label] = "⚪ NEUTRAL"
     return pd.DataFrame([st_row])
+
 
 if st.button("🔄 Refresh Scanner Data", type="primary"): st.cache_data.clear()
 

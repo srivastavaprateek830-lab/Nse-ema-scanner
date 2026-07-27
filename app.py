@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Fix for Yahoo Finance cache location on Streamlit servers
 yf.set_tz_cache_location("/tmp/yf_cache")
@@ -19,24 +20,23 @@ with st.sidebar:
     st.markdown("### ⚙️ Scanner Configurations")
     st.write("Adjust parameters to customize your trading signals.")
     
-    # Dynamic inputs for trading strategies
     ema_period = st.slider("EMA Period", min_value=5, max_value=200, value=20, step=5)
     deviation_threshold = st.slider("Signal Threshold (%)", min_value=1.0, max_value=20.0, value=10.0, step=0.5)
     
     st.markdown("---")
-    # Manual data refresh button placed cleanly in sidebar
     if st.button("🔄 Refresh Market Data", type="primary", use_container_width=True):
         st.cache_data.clear()
+        st.keyboard_sliders = {} 
         st.rerun()
         
     st.markdown("---")
-    st.caption("Data source: Yahoo Finance Feed. Updates cache every 10 minutes.")
+    st.caption("Data source: Individual Ticker Streams via Yahoo Finance.")
 
 # --- MAIN INTERFACE ---
 st.title("📊 NSE F&O Strategy Dashboard")
-st.markdown("This institutional-grade scanner monitors prominent NSE derivatives and identifies extreme price expansions away from moving average baselines.")
+st.markdown("This scanner monitors prominent NSE derivatives and identifies extreme price expansions away from moving average baselines.")
 
-# List of 100+ prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
+# List of prominent liquid NSE F&O Tickers
 FO_TICKERS = [
     "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
     "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
@@ -58,70 +58,92 @@ FO_TICKERS = [
     "ULTRACEMCO.NS", "UPL.NS", "VEDL.NS", "VOLTAS.NS", "WIPRO.NS", "ZEEL.NS"
 ]
 
+def fetch_single_ticker(ticker, lookback, ema_len, session):
+    """Worker function to fetch data for one ticker to bypass network blocks."""
+    try:
+        # Request individual history stream safely
+        df = yf.download(ticker, period=lookback, interval="1d", progress=False, session=session, show_errors=False)
+        if df.empty or len(df) < ema_len:
+            return None
+            
+        close_prices = df['Close']
+        ema_series = close_prices.ewm(span=ema_len, adjust=False).mean()
+        
+        current_price = float(close_prices.iloc[-1])
+        current_ema = float(ema_series.iloc[-1])
+        deviation = ((current_price - current_ema) / current_ema) * 100
+        
+        return {
+            "Ticker": ticker.replace(".NS", ""),
+            "Price (₹)": round(current_price, 2),
+            f"EMA{ema_len} (₹)": round(current_ema, 2),
+            "Deviation (%)": round(deviation, 2)
+        }
+    except:
+        return None
+
 @st.cache_data(ttl=600)
 def scan_markets(ema_len):
     scanned_data = []
+    lookback_period = "6mo" if ema_len > 50 else "3mo"
     
+    # Configure a persistent user session
     session = requests.Session()
     session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
     })
     
-    # Download lookback data based on max possible EMA length
-    lookback_period = "6mo" if ema_len > 50 else "3mo"
-    tickers_str = " ".join(FO_TICKERS)
-    data = yf.download(tickers_str, period=lookback_period, interval="1d", group_by="ticker", progress=False, session=session)
+    # Streamlit visual tracking bars
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     
-    for ticker in FO_TICKERS:
-        try:
-            df = data[ticker].dropna() if ticker in data.columns.levels else pd.DataFrame()
-            if df.empty or len(df) < ema_len:
-                continue
+    # Process tickers in parallel using multi-threading
+    total_tickers = len(FO_TICKERS)
+    completed = 0
+    
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        futures = {executor.submit(fetch_single_ticker, ticker, lookback_period, ema_len, session): ticker for ticker in FO_TICKERS}
+        
+        for future in as_completed(futures):
+            completed += 1
+            ticker_name = futures[future].replace(".NS", "")
+            status_text.text(f"Scanning data lane: {ticker_name} ({completed}/{total_tickers})...")
+            progress_bar.progress(completed / total_tickers)
+            
+            result = future.result()
+            if result:
+                scanned_data.append(result)
                 
-            close_prices = df['Close']
-            ema_series = close_prices.ewm(span=ema_len, adjust=False).mean()
-            
-            current_price = float(close_prices.iloc[-1])
-            current_ema = float(ema_series.iloc[-1])
-            deviation = ((current_price - current_ema) / current_ema) * 100
-            
-            scanned_data.append({
-                "Ticker": ticker.replace(".NS", ""),
-                "Price (₹)": round(current_price, 2),
-                f"EMA{ema_len} (₹)": round(current_ema, 2),
-                "Deviation (%)": round(deviation, 2)
-            })
-        except Exception:
-            continue
-            
+    status_text.empty()
+    progress_bar.empty()
     return pd.DataFrame(scanned_data)
 
 # Run processing engine
-with st.spinner("Analyzing F&O market data channels..."):
-    results_df = scan_markets(ema_period)
+results_df = scan_markets(ema_period)
 
 if not results_df.empty:
-    # Assign signals dynamically based on sidebar threshold values
+    # Assign signals dynamically based on slider values
     def assign_action(row):
         dev = row["Deviation (%)"]
         if dev <= -deviation_threshold:
             return "🔴 BUY (Undervalued)"
         elif dev >= deviation_threshold:
             return "🟢 SELL (Overvalued)"
-        return "白 NEUTRAL"
+        return "⚪ NEUTRAL"
 
     results_df["Action"] = results_df.apply(assign_action, axis=1)
     
     # Filter for active alert setups
-    filtered_df = results_df[results_df["Action"] != "白 NEUTRAL"].copy()
-    filtered_df = filtered_df.reindex(filtered_df["Deviation (%)"].abs().sort_values(ascending=False).index)
+    filtered_df = results_df[results_df["Action"] != "⚪ NEUTRAL"].copy()
+    if not filtered_df.empty:
+        filtered_df = filtered_df.reindex(filtered_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     
     # Sort entire dataset by highest absolute deviation for the main table view
     all_sorted_df = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
 
     # --- METRIC CARDS REGION ---
-    buy_count = len(filtered_df[filtered_df["Deviation (%)"] <= -deviation_threshold])
-    sell_count = len(filtered_df[filtered_df["Deviation (%)"] >= deviation_threshold])
+    buy_count = len(filtered_df[filtered_df["Deviation (%)"] <= -deviation_threshold]) if not filtered_df.empty else 0
+    sell_count = len(filtered_df[filtered_df["Deviation (%)"] >= deviation_threshold]) if not filtered_df.empty else 0
     
     m_col1, m_col2, m_col3 = st.columns(3)
     with m_col1:
@@ -155,7 +177,6 @@ if not results_df.empty:
     with w_col1:
         st.subheader("🔍 Complete F&O Segment Watchlist")
     with w_col2:
-        # Download button directly linked to dataset export
         csv_data = all_sorted_df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="📥 Export Tracker to CSV",
@@ -165,7 +186,6 @@ if not results_df.empty:
             use_container_width=True
         )
         
-    # Live Interactive Text Search Bar Filter
     search_query = st.text_input("⚡ Quick Ticker Search", placeholder="Type symbol name (e.g., RELIANCE, SBIN)...").strip().upper()
     if search_query:
         display_all_df = all_sorted_df[all_sorted_df["Ticker"].str.contains(search_query)]

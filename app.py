@@ -98,7 +98,6 @@ def scan_markets_bulk_tv():
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_timeframes(ticker_clean):
-    """Helper to query multi-timeframe SuperTrend parameters via TradingView scripts."""
     timeframes = {
         "📊 Weekly Trend": Interval.INTERVAL_1_WEEK,
         "📅 Daily Trend": Interval.INTERVAL_1_DAY,
@@ -168,3 +167,5 @@ if not results_df.empty:
     selected_stock = st.selectbox("Click here to select a stock to check its real-time multi-timeframe trend confluence:", sorted(all_sorted["Ticker"].unique()))
     
     if selected_stock:
+        with st.spinner(f"Analyzing multi-timeframe charts for {selected_stock}..."):
+            st_trends = get_supertrend_timeframes(selected_stock)

@@ -2,16 +2,14 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import requests
-
-# Fix for Yahoo Finance cache location on Streamlit servers
-yf.set_tz_cache_location("/tmp/yf_cache")
+import time
 
 # Set up page configuration
 st.set_page_config(page_title="NSE F&O EMA Scanner", layout="wide")
 st.title("📈 NSE F&O EMA20 Deviation Scanner")
 st.write("Scans NSE F&O stocks for price deviations (>10% or <-10%) from the 20-period EMA.")
 
-# List of prominent NSE F&O Tickers (Appended with .NS for Yahoo Finance)
+# Curated list of major liquid NSE F&O Tickers
 FO_TICKERS = [
     "ACC.NS", "AARTIIND.NS", "ABB.NS", "ADANIENT.NS", "ADANIPORTS.NS", "APOLLOHOSP.NS", 
     "ASIANPAINT.NS", "AXISBANK.NS", "BAJAJ-AUTO.NS", "BAJFINANCE.NS", "BAJAJFINSV.NS", 
@@ -33,39 +31,44 @@ FO_TICKERS = [
     "ULTRACEMCO.NS", "UPL.NS", "VEDL.NS", "VOLTAS.NS", "WIPRO.NS", "ZEEL.NS"
 ]
 
-@st.cache_data(ttl=600)  # Caches results for 10 minutes to maintain speed
+@st.cache_data(ttl=600)  # Cache scanner data for 10 minutes
 def scan_markets():
     scanned_data = []
     
-    # Formulate a standard web browser header session to bypass Yahoo blocks
+    # Establish persistent header session
     session = requests.Session()
     session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
     })
     
-    # Download data in bulk using the unblocked browser session
-    tickers_str = " ".join(FO_TICKERS)
-    data = yf.download(tickers_str, period="3m", interval="1d", group_by="ticker", progress=False, session=session)
+    # Visual loading bar directly inside the Streamlit user interface
+    progress_bar = st.progress(0)
+    status_text = st.empty()
     
-    for ticker in FO_TICKERS:
+    total_tickers = len(FO_TICKERS)
+    
+    for index, ticker in enumerate(FO_TICKERS):
         try:
-            # Extract ticker specific dataframe safely
-            df = data[ticker].dropna() if ticker in data.columns.levels[0] else pd.DataFrame()
+            status_text.text(f"Processing {ticker} ({index + 1}/{total_tickers})...")
+            progress_bar.progress((index + 1) / total_tickers)
+            
+            # Request ticker data with an attached browser agent session
+            stock = yf.Ticker(ticker, session=session)
+            df = stock.history(period="3m", interval="1d")
+            
             if df.empty or len(df) < 20:
                 continue
                 
-            # Calculate EMA20
+            # Calculate 20-period Exponential Moving Average (EMA20)
             close_prices = df['Close']
             ema20 = close_prices.ewm(span=20, adjust=False).mean()
             
-            # Get latest values
             current_price = float(close_prices.iloc[-1])
             current_ema20 = float(ema20.iloc[-1])
             
             # Calculate percentage deviation
             deviation = ((current_price - current_ema20) / current_ema20) * 100
             
-            # Determine Action Signal
             if deviation <= -10:
                 action = "🔴 BUY (Undervalued)"
             elif deviation >= 10:
@@ -80,26 +83,30 @@ def scan_markets():
                 "Deviation (%)": round(deviation, 2),
                 "Action": action
             })
+            
+            # Minute anti-throttling safety pause
+            time.sleep(0.05)
+            
         except Exception:
             continue
             
+    # Clear visual status updates upon completion
+    status_text.empty()
+    progress_bar.empty()
+    
     return pd.DataFrame(scanned_data)
 
-# One-click manual refresh button
+# Manual data refresh button
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-with st.spinner("Scanning NSE F&O segment... This takes a few seconds."):
-    results_df = scan_markets()
+results_df = scan_markets()
 
 if not results_df.empty:
-    # Filter for signals matching your criteria
+    # Filter targets displaying high deviations
     filtered_df = results_df[results_df["Deviation (%)"].abs() >= 10]
-    
-    # Sort by the absolute largest deviation
     filtered_df = filtered_df.reindex(filtered_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     
-    # Display Key Statistics Cards
     buy_count = len(filtered_df[filtered_df["Deviation (%)"] <= -10])
     sell_count = len(filtered_df[filtered_df["Deviation (%)"] >= 10])
     
@@ -121,9 +128,8 @@ if not results_df.empty:
     else:
         st.info("No stocks currently show a deviation greater than 10% from the EMA20.")
         
-    # Section to look at all stocks anyway
     with st.expander("🔍 View Complete F&O Watchlist Deviation"):
         all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
         st.dataframe(all_sorted, use_container_width=True, hide_index=True)
 else:
-    st.error("Failed to retrieve market data. Yahoo Finance might still be throttling the cloud server session. Try clicking Refresh.")
+    st.error("No market data recovered. Try clicking 'Refresh Scanner Data' to clear the cloud connection cache.")

@@ -61,7 +61,7 @@ def scan_markets_bulk_tv():
             if not analysis:
                 continue
             try:
-                ticker = full_symbol.split(":")[1]
+                ticker = full_symbol.split(":")
                 indicators = analysis.indicators
                 
                 current_price = float(indicators.get("close", 0.0))
@@ -98,11 +98,12 @@ def scan_markets_bulk_tv():
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_timeframes(ticker_clean):
+    # Fixed: Swapped incorrect attribute keys with verified TradingView interval properties
     timeframes = {
         "📊 Weekly Trend": Interval.INTERVAL_1_WEEK,
         "📅 Daily Trend": Interval.INTERVAL_1_DAY,
         "⏱️ 1 Hour Trend": Interval.INTERVAL_1_HOUR,
-        "⚡ 15 Min Trend": Interval.INTERVAL_15_MIN
+        "⚡ 15 Min Trend": Interval.INTERVAL_15_MINUTES
     }
     st_results = {}
     query_ticker = ticker_clean.replace("&", "_")
@@ -167,5 +168,3 @@ if not results_df.empty:
     selected_stock = st.selectbox("Click here to select a stock to check its real-time multi-timeframe trend confluence:", sorted(all_sorted["Ticker"].unique()))
     
     if selected_stock:
-        with st.spinner(f"Analyzing multi-timeframe charts for {selected_stock}..."):
-            st_trends = get_supertrend_timeframes(selected_stock)

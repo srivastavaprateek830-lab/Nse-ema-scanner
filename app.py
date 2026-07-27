@@ -121,7 +121,7 @@ if not results_df.empty:
     sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
     active_ticker = "ACC"
     if sel_rows and len(sel_rows) > 0:
-        raw_val = display_master_df.iloc[sel_rows]["Ticker"].values[0]
+        raw_val = display_master_df.iloc[sel_rows[0]]["Ticker"]
         active_ticker = str(raw_val)
 
     with col_right_container.spinner(f"Updating trend for {active_ticker}..."): 
@@ -141,7 +141,7 @@ if not results_df.empty:
         
     col_right_container.markdown("---")
 
-    # Creating sub-columns strictly inside the right-hand container layout right above the sector boards
+    # Creating sub-columns strictly inside the right-hand container layout to balance space grids
     sub_col_buy, sub_col_sell, sub_col_sectors = col_right_container.columns([0.33, 0.33, 0.34])
 
     sub_col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
@@ -150,12 +150,12 @@ if not results_df.empty:
     else:
         sub_col_buy.info("No stocks down.")
 
+    # Fixed: Re-routed container targets to use 'sub_col_sell' token to permanently clear the NameError crash
     sub_col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
     if len(sell_df) > 0:
         sub_col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
     else:
         sub_col_sell.info("No stocks pumped.")
-
 
 
     col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
@@ -165,30 +165,12 @@ if not results_df.empty:
         col_sell.info("No stocks pumped.")
 
 
-    col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)
+        # Balanced Right Container Layout: Sector mappings routed cleanly into sub_col_sectors
+    sub_col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)
     for _, row in sector_summary.iterrows():
         color = "#29b5e8" if row["Change"] >= 0 else "#ff4b4b"
         sign = "+" if row["Change"] >= 0 else ""
-        col_sectors.markdown(f"<div style='padding: 6px; margin-bottom: 4px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px;'><span style='font-size: 12px;'>{row['Sector']}</span><span style='float: right; font-weight: bold; color: {color};'>{sign}{round(row['Change'],2)}%</span></div>", unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.subheader("🎯 Live Multi-Timeframe SuperTrend Status Matrix")
-    st.caption("💡 Pro-Tip: Click on any stock row in the 'Complete F&O Watchlist' table above to instantly load its SuperTrend statuses below.")
-    
-    sel_rows = selected_row.get('selection', {}).get('rows', [])
-    active_ticker = display_master_df.iloc[sel_rows]["Ticker"] if sel_rows else "ACC"
-
-    with st.spinner(f"Updating trend for {active_ticker}..."): 
-        st_matrix_df = get_supertrend_row(active_ticker)
-        
-    def style_cells(v):
-        if 'BULLISH' in str(v): return 'background-color: rgba(41, 181, 232, 0.2); color: #29b5e8; font-weight: bold;'
-        if 'BEARISH' in str(v): return 'background-color: rgba(255, 75, 75, 0.2); color: #ff4b4b; font-weight: bold;'
-        return ''
-        
-    if not st_matrix_df.empty:
-        st.dataframe(st_matrix_df.style.map(style_cells, subset=['Weekly', 'Daily', 'Hourly', '15 Min']), use_container_width=True, hide_index=True)
-    else:
-        st.info("No trend data loaded.")
+        sub_col_sectors.markdown(f"<div style='padding: 6px; margin-bottom: 4px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px;'><span style='font-size: 11px;'>{row['Sector']}</span><span style='float: right; font-weight: bold; font-size: 11px; color: {color};'>{sign}{round(row['Change'],2)}%</span></div>", unsafe_allow_html=True)
 else:
     st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")
+

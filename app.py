@@ -30,6 +30,7 @@ FO_TICKERS = [
 ]
 
 # Master dictionary mapping stock tickers natively to their respective indices
+# Master dictionary mapping stock tickers natively to their respective indices
 TICKER_SECTORS = {
     "ACC": "🏗️ MATERIALS", "AARTIIND": "💊 PHARMA", "ABB": "🏗️ MATERIALS", "ADANIENT": "⚡ ENERGY", "ADANIPORTS": "⚡ ENERGY", "APOLLOHOSP": "💊 PHARMA",
     "ASIANPAINT": "🛒 FMCG", "AXISBANK": "🏦 BANKING", "BAJAJ_AUTO": "🚗 AUTO", "BAJFINANCE": "🏦 BANKING", "BAJAJFINSV": "🏦 BANKING",
@@ -51,37 +52,45 @@ TICKER_SECTORS = {
     "ULTRACEMCO": "🏗️ MATERIALS", "UPL": "🏗️ MATERIALS", "VEDL": "🏗️ METALS", "VOLTAS": "🏗️ MATERIALS", "WIPRO": "💻 IT SECTOR", "ZEEL": "🛒 FMCG"
 }
 
-@st.cache_data(ttl=300)
-def scan_markets_bulk_tv():
-    scanned_data = []
+@st.cache_data(ttl=60) # Fast 1-minute tracking cache for live market index sync
+def get_live_sectors_and_bulk_data():
+    scanned_stocks = []
+    sector_indicators = {}
     try:
+        # Fetch individual equities metrics
         bulk_analysis = get_multiple_analysis(screener="india", symbols=FO_TICKERS, interval=Interval.INTERVAL_1_DAY)
         for full_symbol, analysis in bulk_analysis.items():
             if not analysis: continue
-            try:
-                ticker = full_symbol.split(":")[-1]
-                indicators = analysis.indicators
-                current_price = float(indicators.get("close", 0.0))
-                current_ema20 = float(indicators.get("EMA20", 0.0))
-                
-                # Fixed: Corrected TV variable assignment layer to pull true percentage change maps natively
-                pct_change = float(indicators.get("change", 0.0))
-                rsi14 = float(indicators.get("RSI", 50.0))
-                
-                if current_price == 0.0 or current_ema20 == 0.0: continue
-                deviation = ((current_price - current_ema20) / current_ema20) * 100
-                action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
-                
-                scanned_data.append({
-                    "Ticker": ticker.replace("_", "&"), "Price (₹)": round(current_price, 2),
-                    "EMA20 (₹)": round(current_ema20, 2), "Deviation (%)": round(deviation, 2),
-                    "RSI (14)": round(rsi14, 1), "Action": action, "PctChange": pct_change
-                })
-            except: continue
-    except Exception as e: st.error(f"Bulk data pipe error: {str(e)}")
-    return pd.DataFrame(scanned_data)
+            ticker = full_symbol.split(":")[-1]
+            inds = analysis.indicators
+            current_price = float(inds.get("close", 0.0))
+            current_ema20 = float(inds.get("EMA20", 0.0))
+            pct_change = float(inds.get("change", 0.0))
+            if current_price == 0.0 or current_ema20 == 0.0: continue
+            
+            deviation = ((current_price - current_ema20) / current_ema20) * 100
+            action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
+            scanned_stocks.append({
+                "Ticker": ticker.replace("_", "&"), "Price (₹)": round(current_price, 2),
+                "EMA20 (₹)": round(current_ema20, 2), "Deviation (%)": round(deviation, 2),
+                "RSI (14)": round(float(inds.get("RSI", 50.0)), 1), "Action": action
+            })
+            
+        # Fetch the official Nifty Sector Index values to eliminate calculations drift
+        indices = ["NSE:CNXIT", "NSE:BANKNIFTY", "NSE:CNXAUTO", "NSE:CNXPHARMA", "NSE:CNXFMCG", "NSE:CNXENERGY", "NSE:CNXINFRA", "NSE:CNXMETALS", "NSE:CNXREALTY"]
+        indices_analysis = get_multiple_analysis(screener="india", symbols=indices, interval=Interval.INTERVAL_1_DAY)
+        
+        mapping = {"CNXIT": "💻 IT SECTOR", "BANKNIFTY": "🏦 BANKING", "CNXAUTO": "🚗 AUTO", "CNXPHARMA": "💊 PHARMA", "CNXFMCG": "🛒 FMCG", "CNXENERGY": "⚡ ENERGY", "CNXINFRA": "🏗️ MATERIALS", "CNXMETALS": "🏗️ METALS", "CNXREALTY": "🏢 REALTY"}
+        for full_idx, analysis in indices_analysis.items():
+            if analysis:
+                short_name = full_idx.split(":")[-1]
+                sector_indicators[mapping[short_name]] = float(analysis.indicators.get("change", 0.0))
+    except Exception as e:
+        st.error(f"API Data Pipe Resetting: {str(e)}")
+    return pd.DataFrame(scanned_stocks), sector_indicators
 
-def get_supertrend_row(ticker_clean):
+def get_simplified_crossover_row(ticker_clean):
+    # Pure Price Crossover Engine: Checks if current close is above/below the baseline crossover line
     timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
     st_row = {"Stock Name": ticker_clean}
     query_ticker = ticker_clean.replace("&", "_")
@@ -91,22 +100,12 @@ def get_supertrend_row(ticker_clean):
             analysis = handler.get_analysis()
             inds = analysis.indicators
             
-            # Pull unblocked momentum tracking signals natively supported by tradingview_ta
             close_val = float(inds.get("close", 0.0))
-            ema10 = float(inds.get("EMA10", 0.0))
-            ema20 = float(inds.get("EMA20", 0.0))
-            rsi_val = float(inds.get("RSI", 50.0))
+            ema_trend = float(inds.get("EMA20", 0.0)) # Uses standard structural baseline trend axis
             
-            # Replicates precise indicator direction maps cleanly
-            if close_val > ema10 and ema10 > ema20 and rsi_val > 50.0:
-                st_row[label] = "🟢"
-            elif close_val < ema10 and ema10 < ema20 and rsi_val < 50.0:
-                st_row[label] = "🔴"
-            elif close_val > ema20:
-                st_row[label] = "🟢"
-            else:
-                st_row[label] = "🔴"
-        except: 
+            # Simple, un-bloated price crossover check
+            st_row[label] = "🟢" if close_val >= ema_trend else "🔴"
+        except:
             st_row[label] = "⚪"
     return pd.DataFrame([st_row])
 
@@ -114,16 +113,13 @@ def get_supertrend_row(ticker_clean):
 
 if st.button("🔄 Refresh Scanner Data", type="primary"): st.cache_data.clear()
 
-with st.spinner("Executing high-speed indicator streams..."): results_df = scan_markets_bulk_tv()
+with st.spinner("Executing high-speed institutional indicators tracking streams..."): 
+    results_df, live_sectors_map = get_live_sectors_and_bulk_data()
 
 if not results_df.empty:
     all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
     buy_df = all_sorted[all_sorted["Deviation (%)"] <= -10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
     sell_df = all_sorted[all_sorted["Deviation (%)"] >= 10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
-    all_sorted["Sector"] = all_sorted["Ticker"].map(TICKER_SECTORS)
-    
-    # Fixed: Calculated the real percentage mean values to fix the sector summary mismatch bug
-    sector_summary = all_sorted.groupby("Sector", as_index=False)["PctChange"].mean().dropna().sort_values(by="PctChange", ascending=False)
     display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
 
     # --- 📊 MASTER TWO-COLUMN MAIN DIVISION LAYOUT ---
@@ -134,14 +130,14 @@ if not results_df.empty:
 
     col_right_dashboard.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
     
-    # Fixed: Unpacked the clean ticker string text directly, bypassing the Pandas metadata bug
+    # Selection text extractor: Fixed! Uses item selection tags cleanly to pull just the raw stock string name
     sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
     active_ticker = "ACC"
     if sel_rows and len(sel_rows) > 0:
         active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"])
 
     with col_right_dashboard.spinner(f"Analyzing {active_ticker}..."): 
-        st_matrix_df = get_supertrend_row(active_ticker)
+        st_matrix_df = get_simplified_crossover_row(active_ticker)
         
     if not st_matrix_df.empty:
         col_right_dashboard.dataframe(st_matrix_df, use_container_width=True, hide_index=True)
@@ -166,12 +162,15 @@ if not results_df.empty:
         sub_col_sell.info("No stocks pumped.")
 
 
-
-        # Sub-columns integration: Adjusted indicator mapping to load true calculated percentage weights
+       # Sub-columns integration: Displays the official live index values directly on your screen
     sub_col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)
-    for _, row in sector_summary.iterrows():
-        color = "#29b5e8" if row["PctChange"] >= 0 else "#ff4b4b"
-        sign = "+" if row["PctChange"] >= 0 else ""
-        sub_col_sectors.markdown(f"<div style='padding: 6px; margin-bottom: 4px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px;'><span style='font-size: 11px;'>{row['Sector']}</span><span style='float: right; font-weight: bold; font-size: 11px; color: {color};'>{sign}{round(row['PctChange'],2)}%</span></div>", unsafe_allow_html=True)
+    
+    # Sort live fetched sector index dictionary keys high to low
+    sorted_sectors = sorted(live_sectors_map.items(), key=lambda x: x[1], reverse=True)
+    for name, change in sorted_sectors:
+        color = "#29b5e8" if change >= 0 else "#ff4b4b"
+        sign = "+" if change >= 0 else ""
+        sub_col_sectors.markdown(f"<div style='padding: 6px; margin-bottom: 4px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px;'><span style='font-size: 11px;'>{name}</span><span style='float: right; font-weight: bold; font-size: 11px; color: {color};'>{sign}{round(change,2)}%</span></div>", unsafe_allow_html=True)
 else:
     st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")
+

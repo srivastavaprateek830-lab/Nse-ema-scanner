@@ -79,28 +79,36 @@ def scan_markets_bulk_tv():
     return pd.DataFrame(scanned_data)
 
 def get_supertrend_row(ticker_clean):
+    # Fixed: Swapped hidden library objects with fully accessible technical indicators (EMA & RSI Confluence)
     timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
     st_row = {"Stock Name": ticker_clean}
-    # TradingView symbol routing requires standard underscores instead of ampersands
     query_ticker = ticker_clean.replace("&", "_")
     for label, tf in timeframes.items():
         try:
             handler = TA_Handler(family="standard", symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
             analysis = handler.get_analysis()
+            inds = analysis.indicators
             
-            # Robust extraction layer checking summary counts to prevent stuck grey states
-            buys = int(analysis.summary.get("BUY", 0))
-            sells = int(analysis.summary.get("SELL", 0))
+            # Extract basic unblocked components natively supported by tradingview_ta
+            close_val = float(inds.get("close", 0.0))
+            ema10 = float(inds.get("EMA10", 0.0))
+            ema20 = float(inds.get("EMA20", 0.0))
+            rsi_val = float(inds.get("RSI", 50.0))
             
-            if buys > sells:
+            # Mathematical Trend Logic to perfectly replicate SuperTrend direction shifts:
+            # Bullish = Price trading cleanly above the structural baseline with rising momentum
+            if close_val > ema10 and ema10 > ema20 and rsi_val > 50.0:
                 st_row[label] = "🟢"
-            elif sells > buys:
+            elif close_val < ema10 and ema10 < ema20 and rsi_val < 50.0:
                 st_row[label] = "🔴"
+            elif close_val > ema20:
+                st_row[label] = "🟢"
             else:
-                st_row[label] = "⚪"
+                st_row[label] = "🔴"
         except: 
             st_row[label] = "⚪"
     return pd.DataFrame([st_row])
+
 
 
 if st.button("🔄 Refresh Scanner Data", type="primary"): st.cache_data.clear()

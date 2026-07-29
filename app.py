@@ -1,8 +1,20 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import yfinance as yf
+
+# --- STREAMLIT COMPATIBILITY PATCH FOR PANDAS_TA ---
+# This explicitly re-injects the missing append method to stop pandas_ta from crashing
+def patch_pandas_append():
+    if not hasattr(pd.Series, 'append'):
+        def legacy_append(self, other, ignore_index=False, verify_integrity=False, sort=False):
+            return pd.concat([self, other], ignore_index=ignore_index)
+        pd.Series.append = legacy_append
+patch_pandas_append()
+
+# Now it is completely safe to import pandas_ta
 import pandas_ta as ta
+import yfinance as yf
+
 
 # --- Page Layout Setup ---
 st.set_page_config(layout="wide", page_title="F&O SuperTrend Scanner")

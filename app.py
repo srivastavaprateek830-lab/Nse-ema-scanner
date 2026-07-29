@@ -1,176 +1,159 @@
 import streamlit as st
 import pandas as pd
-from tradingview_ta import get_multiple_analysis, TA_Handler, Interval
+import numpy as np
+import yfinance as yf
+import pandas_ta as ta
 
-# Configure broad wide container parameters
-st.set_page_config(page_title="NSE F&O Institutional Dashboard", layout="wide")
-st.title("📈 NSE F&O Institutional Strategy Dashboard")
-st.write("Scans NSE F&O segments on the Daily (1D) Timeframe using unblocked indicator engines.")
+# --- Page Layout Setup ---
+st.set_page_config(layout="wide", page_title="F&O SuperTrend Scanner")
+st.markdown("<style>div.block-container{padding-top:1rem;}</style>", unsafe_allow_html=True)
 
-# High-liquidity F&O Ticker list formatted for TradingView's NSE routing
-FO_TICKERS = [
-    "NSE:ACC", "NSE:AARTIIND", "NSE:ABB", "NSE:ADANIENT", "NSE:ADANIPORTS", "NSE:APOLLOHOSP", 
-    "NSE:ASIANPAINT", "NSE:AXISBANK", "NSE:BAJAJ_AUTO", "NSE:BAJFINANCE", "NSE:BAJAJFINSV", 
-    "NSE:BANKBARODA", "NSE:BEL", "NSE:BHARATFORG", "NSE:BHARTIARTL", "NSE:BHEL", "NSE:BPCL", 
-    "NSE:BRITANNIA", "NSE:CANBK", "NSE:CIPLA", "NSE:COALINDIA", "NSE:COFORGE", "NSE:CONCOR", 
-    "NSE:DABUR", "NSE:DIVISLAB", "NSE:DIXON", "NSE:DLF", "NSE:DRREDDY", "NSE:EICHERMOT", 
-    "NSE:GAIL", "NSE:GLENMARK", "NSE:GODREJCP", "NSE:GODREJPROP", "NSE:GRASIM", "NSE:HAL", 
-    "NSE:HAVELLS", "NSE:HCLTECH", "NSE:HDFCBANK", "NSE:HDFCLIFE", "NSE:HEROMOTOCO", 
-    "NSE:HINDALCO", "NSE:HINDUNILVR", "NSE:ICICIBANK", "NSE:ICICIGI", "NSE:IDEA", "NSE:IGL", 
-    "NSE:INDHOTEL", "NSE:INDIGO", "NSE:INDUSINDBK", "NSE:INDUSTOWER", "NSE:INFY", "NSE:IOC", 
-    "NSE:IRCTC", "NSE:ITC", "NSE:JINDALSTEL", "NSE:JSWSTEEL", "NSE:KOTAKBANK", "NSE:LT", 
-    "NSE:LTIM", "NSE:LUPIN", "NSE:M_M", "NSE:MARICO", "NSE:MARUTI", "NSE:MCX", "NSE:MUTHOOTFIN", 
-    "NSE:NATIONALUM", "NSE:NAUKRI", "NSE:NESTLEIND", "NSE:NMDC", "NSE:NTPC", "NSE:ONGC", 
-    "NSE:PERSISTENT", "NSE:PFC", "NSE:PIDILITIND", "NSE:PNB", "NSE:POLYCAB", "NSE:POWERGRID", 
-    "NSE:REC", "NSE:RELIANCE", "NSE:SAIL", "NSE:SBICARD", "NSE:SBILIFE", "NSE:SBIN", 
-    "NSE:SHRIRAMFIN", "NSE:SIEMENS", "NSE:SRF", "NSE:SUNPHARMA", "NSE:TATACHEMICAL", 
-    "NSE:TATACOMM", "NSE:TATACONSUM", "NSE:TATAMOTORS", "NSE:TATAPOWER", "NSE:TATASTEEL", 
-    "NSE:TCS", "NSE:TECHM", "NSE:TITAN", "NSE:TORNTPHARM", "NSE:TRENT", "NSE:TVSMOTOR", 
-    "NSE:ULTRACEMCO", "NSE:UPL", "NSE:VEDL", "NSE:VOLTAS", "NSE:WIPRO", "NSE:ZEEL"
+# --- F&O Watchlist Universe ---
+FO_STOCKS = [
+    "COFORGE.NS", "HCLTECH.NS", "TCS.NS", "TVSMOTOR.NS", "DIVISLAB.NS",
+    "NAUKRI.NS", "CONCOR.NS", "PERSISTENT.NS", "TECHM.NS", "INFY.NS",
+    "BAJAJ-AUTO.NS", "DRREDDY.NS", "DIXON.NS", "GODREJPROP.NS", "TITAN.NS", "SBICARD.NS"
 ]
 
-# Master dictionary mapping stock tickers natively to their respective indices
-# Master dictionary mapping stock tickers natively to their respective indices
-TICKER_SECTORS = {
-    "ACC": "🏗️ MATERIALS", "AARTIIND": "💊 PHARMA", "ABB": "🏗️ MATERIALS", "ADANIENT": "⚡ ENERGY", "ADANIPORTS": "⚡ ENERGY", "APOLLOHOSP": "💊 PHARMA",
-    "ASIANPAINT": "🛒 FMCG", "AXISBANK": "🏦 BANKING", "BAJAJ_AUTO": "🚗 AUTO", "BAJFINANCE": "🏦 BANKING", "BAJAJFINSV": "🏦 BANKING",
-    "BANKBARODA": "🏦 BANKING", "BEL": "💻 IT SECTOR", "BHARATFORG": "🚗 AUTO", "BHARTIARTL": "💻 IT SECTOR", "BHEL": "⚡ ENERGY", "BPCL": "⚡ ENERGY",
-    "BRITANNIA": "🛒 FMCG", "CANBK": "🏦 BANKING", "CIPLA": "💊 PHARMA", "COALINDIA": "⚡ ENERGY", "COFORGE": "💻 IT SECTOR", "CONCOR": "⚡ ENERGY",
-    "DABUR": "🛒 FMCG", "DIVISLAB": "💊 PHARMA", "DIXON": "💻 IT SECTOR", "DLF": "🏢 REALTY", "DRREDDY": "💊 PHARMA", "EICHERMOT": "🚗 AUTO",
-    "GAIL": "⚡ ENERGY", "GLENMARK": "💊 PHARMA", "GODREJCP": "🛒 FMCG", "GODREJPROP": "🏢 REALTY", "GRASIM": "🏗️ MATERIALS", "HAL": "🏗️ MATERIALS",
-    "HAVELLS": "🏗️ MATERIALS", "HCLTECH": "💻 IT SECTOR", "HDFCBANK": "🏦 BANKING", "HDFCLIFE": "🏦 BANKING", "HEROMOTOCO": "🚗 AUTO",
-    "HINDALCO": "🏗️ METALS", "HINDUNILVR": "🛒 FMCG", "ICICIBANK": "🏦 BANKING", "ICICIGI": "🏦 BANKING", "IDEA": "💻 IT SECTOR", "IGL": "⚡ ENERGY",
-    "INDHOTEL": "🛒 FMCG", "INDIGO": "🚗 AUTO", "INDUSINDBK": "🏦 BANKING", "INDUSTOWER": "💻 IT SECTOR", "INFY": "💻 IT SECTOR", "IOC": "⚡ ENERGY",
-    "IRCTC": "🛒 FMCG", "ITC": "🛒 FMCG", "JINDALSTEL": "🏗️ METALS", "JSWSTEEL": "🏗️ METALS", "KOTAKBANK": "🏦 BANKING", "LT": "🏗️ MATERIALS",
-    "LTIM": "💻 IT SECTOR", "LUPIN": "💊 PHARMA", "M_M": "🚗 AUTO", "MARICO": "🛒 FMCG", "MARUTI": "🚗 AUTO", "MCX": "🏦 BANKING", "MUTHOOTFIN": "🏦 BANKING",
-    "NATIONALUM": "🏗️ METALS", "NAUKRI": "💻 IT SECTOR", "NESTLEIND": "🛒 FMCG", "NMDC": "🏗️ METALS", "NTPC": "⚡ ENERGY", "ONGC": "⚡ ENERGY",
-    "PERSISTENT": "💻 IT SECTOR", "PFC": "🏦 BANKING", "PIDILITIND": "🛒 FMCG", "PNB": "🏦 BANKING", "POLYCAB": "🏗️ MATERIALS", "POWERGRID": "⚡ ENERGY",
-    "REC": "🏦 BANKING", "RELIANCE": "⚡ ENERGY", "SAIL": "🏗️ METALS", "SBICARD": "🏦 BANKING", "SBILIFE": "🏦 BANKING", "SBIN": "🏦 BANKING",
-    "SHRIRAMFIN": "🏦 BANKING", "SIEMENS": "🏗️ MATERIALS", "SRF": "🏗️ MATERIALS", "SUNPHARMA": "💊 PHARMA", "TATACHEMICAL": "🏗️ MATERIALS",
-    "TATACOMM": "💻 IT SECTOR", "TATACONSUM": "🛒 FMCG", "TATAMOTORS": "🚗 AUTO", "TATAPOWER": "⚡ ENERGY", "TATASTEEL": "🏗️ METALS",
-    "TCS": "💻 IT SECTOR", "TECHM": "💻 IT SECTOR", "TITAN": "🛒 FMCG", "TORNTPHARM": "💊 PHARMA", "TRENT": "🛒 FMCG", "TVSMOTOR": "🚗 AUTO",
-    "ULTRACEMCO": "🏗️ MATERIALS", "UPL": "🏗️ MATERIALS", "VEDL": "🏗️ METALS", "VOLTAS": "🏗️ MATERIALS", "WIPRO": "💻 IT SECTOR", "ZEEL": "🛒 FMCG"
+SECTORS = {
+    "IT SECTOR": "^CNXIT",
+    "BANKING": "^NSEBANK",
+    "ENERGY": "^CNXENERGY"
 }
 
-@st.cache_data(ttl=60) # Fast 1-minute tracking cache for live market index sync
-def get_live_sectors_and_bulk_data():
-    scanned_stocks = []
-    sector_indicators = {}
+# --- Core SuperTrend Engine ---
+def get_supertrend_signal(df, length=10, multiplier=3.0):
+    """Returns 1 for Bullish (🟢), -1 for Bearish (🔴), 0 for No Data"""
+    if len(df) < length:
+        return 0
+    st_df = ta.supertrend(df['High'], df['Low'], df['Close'], length=length, multiplier=multiplier)
+    if st_df is None or st_df.empty:
+        return 0
+    direction_col = f"SUPERTd_{length}_{multiplier}"
+    if direction_col in st_df.columns:
+        return int(st_df[direction_col].iloc[-1])
+    return 0
+
+@st.cache_data(ttl=300) # 5-Minute Cache to safeguard API rate limits
+def fetch_stock_matrix_data(symbol):
     try:
-        # Fetch individual equities metrics
-        bulk_analysis = get_multiple_analysis(screener="india", symbols=FO_TICKERS, interval=Interval.INTERVAL_1_DAY)
-        for full_symbol, analysis in bulk_analysis.items():
-            if not analysis: continue
-            ticker = full_symbol.split(":")[-1]
-            inds = analysis.indicators
-            current_price = float(inds.get("close", 0.0))
-            current_ema20 = float(inds.get("EMA20", 0.0))
-            pct_change = float(inds.get("change", 0.0))
-            if current_price == 0.0 or current_ema20 == 0.0: continue
+        # Pull required historical data resolution bundles
+        hf_df = yf.download(symbol, period="1mo", interval="15m", progress=False)
+        d_df = yf.download(symbol, period="2y", interval="1d", progress=False)
+        w_df = yf.download(symbol, period="5y", interval="1wk", progress=False)
+        
+        if hf_df.empty or d_df.empty or w_df.empty:
+            return None
+
+        # Standardize column structure (strips multi-index levels if present)
+        for df in [hf_df, d_df, w_df]:
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = df.columns.get_level_values(0)
+
+        # 15M and 1H Resampling Calculations
+        st_15m = get_supertrend_signal(hf_df)
+        df_1h = hf_df.resample('1H').agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'}).dropna()
+        st_1h = get_supertrend_signal(df_1h)
+        
+        # Daily and Weekly Calculations
+        st_daily = get_supertrend_signal(d_df)
+        st_weekly = get_supertrend_signal(w_df)
+        
+        # Core Watchlist Data Features
+        price = float(hf_df['Close'].iloc[-1])
+        prev_close = float(d_df['Close'].iloc[-2]) if len(d_df) > 1 else price
+        pct_change = ((price - prev_close) / prev_close) * 100
+        
+        rsi_series = ta.rsi(d_df['Close'], length=14)
+        current_rsi = float(rsi_series.iloc[-1]) if rsi_series is not None else 50.0
+
+        return {
+            "Price": round(price, 2), "Change": round(pct_change, 2), "RSI": round(current_rsi, 1),
+            "W": st_weekly, "D": st_daily, "1H": st_1h, "15m": st_15m
+        }
+    except:
+        return None
+
+# --- Application Main Executive Process ---
+st.title("🔍 Live Multi-Timeframe SuperTrend Status Matrix")
+if st.button("🔄 Refresh Scanner Data", type="primary"):
+    st.cache_data.clear()
+
+# Process Raw Universe Metrics
+watchlist_data = []
+with st.spinner("Syncing Live Exchange Data Feeds..."):
+    for stock in FO_STOCKS:
+        res = fetch_stock_matrix_data(stock)
+        if res:
+            # Map action logic based on the 1-Hour SuperTrend Frame
+            action_signal = "🟢 BUY" if res["1H"] == 1 else "🔴 SELL"
             
-            deviation = ((current_price - current_ema20) / current_ema20) * 100
-            action = "🔴 BUY" if deviation <= -10.0 else ("🟢 SELL" if deviation >= 10.0 else "⚪ HOLD")
-            scanned_stocks.append({
-                "Ticker": ticker.replace("_", "&"), "Price (₹)": round(current_price, 2),
-                "EMA20 (₹)": round(current_ema20, 2), "Deviation (%)": round(deviation, 2),
-                "RSI (14)": round(float(inds.get("RSI", 50.0)), 1), "Action": action
+            watchlist_data.append({
+                "Ticker": stock.replace(".NS", ""), "Price (₹)": res["Price"], "Change (%)": res["Change"],
+                "RSI (14)": res["RSI"], "Action": action_signal, "W": res["W"], "D": res["D"],
+                "1H": res["1H"], "15m": res["15m"]
             })
             
-        # Fetch the official Nifty Sector Index values to eliminate calculations drift
-        indices = ["NSE:CNXIT", "NSE:BANKNIFTY", "NSE:CNXAUTO", "NSE:CNXPHARMA", "NSE:CNXFMCG", "NSE:CNXENERGY", "NSE:CNXINFRA", "NSE:CNXMETALS", "NSE:CNXREALTY"]
-        indices_analysis = get_multiple_analysis(screener="india", symbols=indices, interval=Interval.INTERVAL_1_DAY)
-        
-        mapping = {"CNXIT": "💻 IT SECTOR", "BANKNIFTY": "🏦 BANKING", "CNXAUTO": "🚗 AUTO", "CNXPHARMA": "💊 PHARMA", "CNXFMCG": "🛒 FMCG", "CNXENERGY": "⚡ ENERGY", "CNXINFRA": "🏗️ MATERIALS", "CNXMETALS": "🏗️ METALS", "CNXREALTY": "🏢 REALTY"}
-        for full_idx, analysis in indices_analysis.items():
-            if analysis:
-                short_name = full_idx.split(":")[-1]
-                sector_indicators[mapping[short_name]] = float(analysis.indicators.get("change", 0.0))
-    except Exception as e:
-        st.error(f"API Data Pipe Resetting: {str(e)}")
-    return pd.DataFrame(scanned_stocks), sector_indicators
+    # Fetch Sector Changes
+    sector_perf = {}
+    for sec_name, sec_ticker in SECTORS.items():
+        sec_df = yf.download(sec_ticker, period="5d", interval="1d", progress=False)
+        if not sec_df.empty:
+            if isinstance(sec_df.columns, pd.MultiIndex): sec_df.columns = sec_df.columns.get_level_values(0)
+            chg = ((sec_df['Close'].iloc[-1] - sec_df['Close'].iloc[-2]) / sec_df['Close'].iloc[-2]) * 100
+            sector_perf[sec_name] = round(chg, 2)
 
-def get_simplified_crossover_row(ticker_clean):
-    # Pure Price Crossover Engine: Checks if current close is above/below the baseline crossover line
-    timeframes = {"Weekly": Interval.INTERVAL_1_WEEK, "Daily": Interval.INTERVAL_1_DAY, "Hourly": Interval.INTERVAL_1_HOUR, "15 Min": Interval.INTERVAL_15_MINUTES}
-    st_row = {"Stock Name": ticker_clean}
-    query_ticker = ticker_clean.replace("&", "_")
-    for label, tf in timeframes.items():
-        try:
-            handler = TA_Handler(family="standard", symbol=query_ticker, exchange="NSE", screener="india", interval=tf)
-            analysis = handler.get_analysis()
-            inds = analysis.indicators
+df_master = pd.DataFrame(watchlist_data)
+
+# --- UI Presentation Grid Layer ---
+left_col, right_col = st.columns([1.1, 0.9])
+
+with left_col:
+    st.subheader("📋 Complete F&O Watchlist")
+    if not df_master.empty:
+        st.dataframe(
+            df_master[["Ticker", "Price (₹)", "Change (%)", "RSI (14)", "Action"]],
+            use_container_width=True, hide_index=True
+        )
+
+with right_col:
+    st.subheader("🎯 Live Multi-Timeframe SuperTrend Status Matrix")
+    if not df_master.empty:
+        matrix_df = df_master.copy()
+        def format_emoji(val): return "🟩" if val == 1 else "🟥"
+        for tf in ["W", "D", "1H", "15m"]:
+            matrix_df[tf] = matrix_df[tf].apply(format_emoji)
             
-            close_val = float(inds.get("close", 0.0))
-            ema_trend = float(inds.get("EMA20", 0.0)) # Uses standard structural baseline trend axis
-            
-            # Simple, un-bloated price crossover check
-            st_row[label] = "🟢" if close_val >= ema_trend else "🔴"
-        except:
-            st_row[label] = "⚪"
-    return pd.DataFrame([st_row])
+        st.dataframe(
+            matrix_df[["Ticker", "W", "D", "1H", "15m"]].rename(columns={"W": "Weekly", "D": "Daily", "1H": "Hourly", "15m": "15 Min"}),
+            use_container_width=True, hide_index=True
+        )
 
+st.divider()
 
+# --- Bottom Dynamic Routing System Layers ---
+b_col1, b_col2, b_col3 = st.columns(3)
 
-if st.button("🔄 Refresh Scanner Data", type="primary"): st.cache_data.clear()
+with b_col1:
+    st.markdown("### 📥 Buy Stocks (1H SuperTrend = 🟢)")
+    if not df_master.empty:
+        buys = df_master[df_master["1H"] == 1][["Ticker", "Price (₹)", "Change (%)", "RSI (14)"]]
+        if not buys.empty:
+            st.dataframe(buys, use_container_width=True, hide_index=True)
+        else:
+            st.info("No stocks currently meet Bullish 1H setups.")
 
-with st.spinner("Executing high-speed institutional indicators tracking streams..."): 
-    results_df, live_sectors_map = get_live_sectors_and_bulk_data()
+with b_col2:
+    st.markdown("### 📤 Sell Stocks (1H SuperTrend = 🔴)")
+    if not df_master.empty:
+        sells = df_master[df_master["1H"] == -1][["Ticker", "Price (₹)", "Change (%)", "RSI (14)"]]
+        if not sells.empty:
+            st.dataframe(sells, use_container_width=True, hide_index=True)
+        else:
+            st.info("No stocks currently meet Bearish 1H setups.")
 
-if not results_df.empty:
-    all_sorted = results_df.reindex(results_df["Deviation (%)"].abs().sort_values(ascending=False).index)
-    buy_df = all_sorted[all_sorted["Deviation (%)"] <= -10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
-    sell_df = all_sorted[all_sorted["Deviation (%)"] >= 10.0][["Ticker", "Price (₹)", "Deviation (%)", "RSI (14)"]]
-    display_master_df = all_sorted[["Ticker", "Price (₹)", "EMA20 (₹)", "Deviation (%)", "RSI (14)", "Action"]]
-
-    # --- 📊 MASTER TWO-COLUMN MAIN DIVISION LAYOUT ---
-    col_left_watchlist, col_right_dashboard = st.columns([0.48, 0.52])
-
-    col_left_watchlist.subheader("🔍 Complete F&O Watchlist")
-    selected_row = col_left_watchlist.dataframe(display_master_df, use_container_width=True, hide_index=True, on_select="rerun", selection_mode="single-row")
-
-    col_right_dashboard.markdown("### 🎯 Live Multi-Timeframe SuperTrend Status Matrix")
-    
-    # Selection text extractor: Fixed! Uses item selection tags cleanly to pull just the raw stock string name
-    sel_rows = selected_row.get('selection', {}).get('rows', []) if 'selected_row' in locals() else []
-    active_ticker = "ACC"
-    if sel_rows and len(sel_rows) > 0:
-        active_ticker = str(display_master_df.iloc[sel_rows[0]]["Ticker"])
-
-    with col_right_dashboard.spinner(f"Analyzing {active_ticker}..."): 
-        st_matrix_df = get_simplified_crossover_row(active_ticker)
-        
-    if not st_matrix_df.empty:
-        col_right_dashboard.dataframe(st_matrix_df, use_container_width=True, hide_index=True)
-    else:
-        col_right_dashboard.info("No trend data loaded.")
-        
-    col_right_dashboard.markdown("---")
-
-    # Right Column Lower Section: Initialize sub-columns strictly inside the right-hand panel
-    sub_col_buy, sub_col_sell, sub_col_sectors = col_right_dashboard.columns([0.33, 0.33, 0.34])
-
-    sub_col_buy.markdown("<div style='background-color: rgba(255, 75, 75, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #ff4b4b; font-weight: bold;'>🚨 Buy Stocks (&le; -10%)</div><br>", unsafe_allow_html=True)
-    if len(buy_df) > 0:
-        sub_col_buy.dataframe(buy_df, use_container_width=True, hide_index=True)
-    else:
-        sub_col_buy.info("No stocks down.")
-
-    sub_col_sell.markdown("<div style='background-color: rgba(41, 181, 232, 0.12); padding: 10px; border-radius: 4px; border-left: 4px solid #29b5e8; font-weight: bold;'>🚨 Sell Stocks (&ge; +10%)</div><br>", unsafe_allow_html=True)
-    if len(sell_df) > 0:
-        sub_col_sell.dataframe(sell_df, use_container_width=True, hide_index=True)
-    else:
-        sub_col_sell.info("No stocks pumped.")
-
-
-       # Sub-columns integration: Displays the official live index values directly on your screen
-    sub_col_sectors.markdown("<div style='background-color: rgba(255, 255, 255, 0.05); padding: 10px; border-radius: 4px; border-left: 4px solid #777777; font-weight: bold;'>⚡ Nifty Sectors Performance</div><br>", unsafe_allow_html=True)
-    
-    # Sort live fetched sector index dictionary keys high to low
-    sorted_sectors = sorted(live_sectors_map.items(), key=lambda x: x[1], reverse=True)
-    for name, change in sorted_sectors:
-        color = "#29b5e8" if change >= 0 else "#ff4b4b"
-        sign = "+" if change >= 0 else ""
-        sub_col_sectors.markdown(f"<div style='padding: 6px; margin-bottom: 4px; border: 1px solid rgba(128,128,128,0.15); border-radius: 4px;'><span style='font-size: 11px;'>{name}</span><span style='float: right; font-weight: bold; font-size: 11px; color: {color};'>{sign}{round(change,2)}%</span></div>", unsafe_allow_html=True)
-else:
-    st.error("Market API server temporarily busy. Please click 'Refresh Scanner Data' to cycle endpoints.")
-
+with b_col3:
+    st.markdown("### ⚡ Nifty Sectors Performance")
+    for sec, perf in sector_perf.items():
+        color_flag = "🟢" if perf >= 0 else "🔴"
+        st.markdown(f"**{sec}** : {color_flag} `{perf:+.2f}%`")

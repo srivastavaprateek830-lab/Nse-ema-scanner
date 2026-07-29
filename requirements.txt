@@ -1,3 +1,5 @@
 streamlit
 pandas
-tradingview_ta
+numpy
+yfinance
+pandas_ta

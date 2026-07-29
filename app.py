@@ -1,20 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-
-# --- STREAMLIT COMPATIBILITY PATCH FOR PANDAS_TA ---
-# This explicitly re-injects the missing append method to stop pandas_ta from crashing
-def patch_pandas_append():
-    if not hasattr(pd.Series, 'append'):
-        def legacy_append(self, other, ignore_index=False, verify_integrity=False, sort=False):
-            return pd.concat([self, other], ignore_index=ignore_index)
-        pd.Series.append = legacy_append
-patch_pandas_append()
-
-# Now it is completely safe to import pandas_ta
-import pandas_ta as ta
 import yfinance as yf
-
 
 # --- Page Layout Setup ---
 st.set_page_config(layout="wide", page_title="F&O SuperTrend Scanner")
@@ -33,23 +20,86 @@ SECTORS = {
     "ENERGY": "^CNXENERGY"
 }
 
-# --- Core SuperTrend Engine ---
-def get_supertrend_signal(df, length=10, multiplier=3.0):
-    """Returns 1 for Bullish (🟢), -1 for Bearish (🔴), 0 for No Data"""
-    if len(df) < length:
-        return 0
-    st_df = ta.supertrend(df['High'], df['Low'], df['Close'], length=length, multiplier=multiplier)
-    if st_df is None or st_df.empty:
-        return 0
-    direction_col = f"SUPERTd_{length}_{multiplier}"
-    if direction_col in st_df.columns:
-        return int(st_df[direction_col].iloc[-1])
-    return 0
+# --- Pure Native Mathematics Engine (Replaces pandas_ta) ---
+def compute_rsi_native(series, period=14):
+    """Calculates Wilder's RSI using pure mathematical calculations"""
+    if len(series) <= period:
+        return 50.0
+    delta = series.diff()
+    gain = (delta.where(delta > 0, 0)).copy()
+    loss = (-delta.where(delta < 0, 0)).copy()
+    
+    avg_gain = gain.rolling(window=period).mean()
+    avg_loss = loss.rolling(window=period).mean()
+    
+    # Smooth using Wilder's technique
+    for i in range(period, len(series)):
+        avg_gain.iloc[i] = (avg_gain.iloc[i-1] * (period - 1) + gain.iloc[i]) / period
+        avg_loss.iloc[i] = (avg_loss.iloc[i-1] * (period - 1) + loss.iloc[i]) / period
+        
+    rs = avg_gain / avg_loss
+    rsi = 100 - (100 / (1 + rs))
+    return float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
 
-@st.cache_data(ttl=300) # 5-Minute Cache to safeguard API rate limits
+def compute_supertrend_native(df, period=10, multiplier=3.0):
+    """Calculates standard SuperTrend without library dependencies"""
+    if len(df) < period:
+        return 0
+        
+    high = df['High'].astype(float)
+    low = df['Low'].astype(float)
+    close = df['Close'].astype(float)
+    
+    # Calculate True Range (TR)
+    hl = high - low
+    hc = (high - close.shift(1)).abs()
+    lc = (low - close.shift(1)).abs()
+    tr = pd.concat([hl, hc, lc], axis=1).max(axis=1)
+    
+    # Calculate Average True Range (ATR)
+    atr = tr.rolling(window=period).mean()
+    for i in range(period, len(df)):
+        atr.iloc[i] = (atr.iloc[i-1] * (period - 1) + tr.iloc[i]) / period
+        
+    hl2 = (high + low) / 2
+    basic_upper = hl2 + (multiplier * atr)
+    basic_lower = hl2 - (multiplier * atr)
+    
+    final_upper = basic_upper.copy()
+    final_lower = basic_lower.copy()
+    trend = np.ones(len(df)) # 1 = Bullish, -1 = Bearish
+    
+    for i in range(1, len(df)):
+        # Calculate upper band boundaries
+        if basic_upper.iloc[i] < final_upper.iloc[i-1] or close.iloc[i-1] > final_upper.iloc[i-1]:
+            final_upper.iloc[i] = basic_upper.iloc[i]
+        else:
+            final_upper.iloc[i] = final_upper.iloc[i-1]
+            
+        # Calculate lower band boundaries
+        if basic_lower.iloc[i] > final_lower.iloc[i-1] or close.iloc[i-1] < final_lower.iloc[i-1]:
+            final_lower.iloc[i] = basic_lower.iloc[i]
+        else:
+            final_lower.iloc[i] = final_lower.iloc[i-1]
+            
+        # Define current trend direction logic
+        if close.iloc[i] > final_upper.iloc[i]:
+            trend[i] = 1
+        elif close.iloc[i] < final_lower.iloc[i]:
+            trend[i] = -1
+        else:
+            trend[i] = trend[i-1]
+            if trend[i] == 1 and final_lower.iloc[i] < final_lower.iloc[i-1]:
+                final_lower.iloc[i] = final_lower.iloc[i-1]
+            if trend[i] == -1 and final_upper.iloc[i] > final_upper.iloc[i-1]:
+                final_upper.iloc[i] = final_upper.iloc[i-1]
+                
+    return int(trend[-1])
+
+@st.cache_data(ttl=300)
 def fetch_stock_matrix_data(symbol):
     try:
-        # Pull required historical data resolution bundles
+        # Fetch multi-timeframe source histories
         hf_df = yf.download(symbol, period="1mo", interval="15m", progress=False)
         d_df = yf.download(symbol, period="2y", interval="1d", progress=False)
         w_df = yf.download(symbol, period="5y", interval="1wk", progress=False)
@@ -57,27 +107,23 @@ def fetch_stock_matrix_data(symbol):
         if hf_df.empty or d_df.empty or w_df.empty:
             return None
 
-        # Standardize column structure (strips multi-index levels if present)
+        # Clean yfinance multi-index structural columns
         for df in [hf_df, d_df, w_df]:
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
 
-        # 15M and 1H Resampling Calculations
-        st_15m = get_supertrend_signal(hf_df)
+        # Resample data streams natively
+        st_15m = compute_supertrend_native(hf_df)
         df_1h = hf_df.resample('1H').agg({'Open':'first','High':'max','Low':'min','Close':'last','Volume':'sum'}).dropna()
-        st_1h = get_supertrend_signal(df_1h)
+        st_1h = compute_supertrend_native(df_1h)
         
-        # Daily and Weekly Calculations
-        st_daily = get_supertrend_signal(d_df)
-        st_weekly = get_supertrend_signal(w_df)
+        st_daily = compute_supertrend_native(d_df)
+        st_weekly = compute_supertrend_native(w_df)
         
-        # Core Watchlist Data Features
         price = float(hf_df['Close'].iloc[-1])
         prev_close = float(d_df['Close'].iloc[-2]) if len(d_df) > 1 else price
         pct_change = ((price - prev_close) / prev_close) * 100
-        
-        rsi_series = ta.rsi(d_df['Close'], length=14)
-        current_rsi = float(rsi_series.iloc[-1]) if rsi_series is not None else 50.0
+        current_rsi = compute_rsi_native(d_df['Close'], length=14)
 
         return {
             "Price": round(price, 2), "Change": round(pct_change, 2), "RSI": round(current_rsi, 1),
@@ -86,38 +132,36 @@ def fetch_stock_matrix_data(symbol):
     except:
         return None
 
-# --- Application Main Executive Process ---
+# --- Application Engine Operations ---
 st.title("🔍 Live Multi-Timeframe SuperTrend Status Matrix")
 if st.button("🔄 Refresh Scanner Data", type="primary"):
     st.cache_data.clear()
 
-# Process Raw Universe Metrics
 watchlist_data = []
-with st.spinner("Syncing Live Exchange Data Feeds..."):
+with st.spinner("Processing Market Architectures Natively..."):
     for stock in FO_STOCKS:
         res = fetch_stock_matrix_data(stock)
         if res:
-            # Map action logic based on the 1-Hour SuperTrend Frame
             action_signal = "🟢 BUY" if res["1H"] == 1 else "🔴 SELL"
-            
             watchlist_data.append({
                 "Ticker": stock.replace(".NS", ""), "Price (₹)": res["Price"], "Change (%)": res["Change"],
                 "RSI (14)": res["RSI"], "Action": action_signal, "W": res["W"], "D": res["D"],
                 "1H": res["1H"], "15m": res["15m"]
             })
             
-    # Fetch Sector Changes
+    # Calculate index updates natively
     sector_perf = {}
     for sec_name, sec_ticker in SECTORS.items():
         sec_df = yf.download(sec_ticker, period="5d", interval="1d", progress=False)
         if not sec_df.empty:
-            if isinstance(sec_df.columns, pd.MultiIndex): sec_df.columns = sec_df.columns.get_level_values(0)
+            if isinstance(sec_df.columns, pd.MultiIndex): 
+                sec_df.columns = sec_df.columns.get_level_values(0)
             chg = ((sec_df['Close'].iloc[-1] - sec_df['Close'].iloc[-2]) / sec_df['Close'].iloc[-2]) * 100
             sector_perf[sec_name] = round(chg, 2)
 
 df_master = pd.DataFrame(watchlist_data)
 
-# --- UI Presentation Grid Layer ---
+# --- UI Layout Rendering Layer ---
 left_col, right_col = st.columns([1.1, 0.9])
 
 with left_col:
@@ -143,7 +187,7 @@ with right_col:
 
 st.divider()
 
-# --- Bottom Dynamic Routing System Layers ---
+# --- Dynamic Automated Box Routing ---
 b_col1, b_col2, b_col3 = st.columns(3)
 
 with b_col1:

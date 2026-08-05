@@ -4,135 +4,156 @@ import pandas as pd
 import ta
 
 # --- Page Config Setup ---
-st.set_page_config(layout="wide", page_title="F&O Swing Dashboard")
+st.set_page_config(layout="wide", page_title="Master F&O Swing Dashboard")
 
-# --- Optimized CSS Styles for 3 Columns ---
+# --- Streamlit Theme Custom Table CSS Styling Injector ---
 st.html("""
     <style>
-    .status-card {
-        padding: 12px; border-radius: 6px; margin-bottom: 10px; color: #ffffff; font-family: monospace;
+    .reportview-container .main .block-container { padding-top: 1rem; }
+    .fno-table {
+        width: 100%; border-collapse: collapse; margin-bottom: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-    .bg-neutral { background-color: #1e1e24; border-left: 4px solid #6c757d; }
-    .bg-buy { background-color: #0e2f1d; border-left: 4px solid #198754; }
-    .bg-sell { background-color: #3b141a; border-left: 4px solid #dc3545; }
-    .text-green { color: #28a745; font-weight: bold; }
-    .text-red { color: #dc3545; font-weight: bold; }
+    .fno-table th {
+        background-color: #11141a; color: #a1a7b5; padding: 10px; text-align: left;
+        font-size: 12px; font-weight: 600; border-bottom: 2px solid #232833;
+    }
+    .fno-table td {
+        padding: 10px; border-bottom: 1px solid #1f242e; font-size: 13px; color: #ffffff;
+    }
+    .dot-green { height: 12px; width: 12px; background-color: #28a745; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .dot-red { height: 12px; width: 12px; background-color: #dc3545; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .dot-gray { height: 12px; width: 12px; background-color: #6c757d; border-radius: 50%; display: inline-block; margin-right: 5px; }
+    .tag-buy { color: #28a745; font-weight: bold; }
+    .tag-sell { color: #dc3545; font-weight: bold; }
+    .tag-neutral { color: #6c757d; font-weight: bold; }
     </style>
 """)
 
-st.title("🎯 High-Conviction F&O Multi-Column Dashboard")
-st.caption("Complete Market Regime Matrix (RSI 50 Filter + Trend Line Proxy + 7 SMA)")
+st.title("🎯 Comprehensive F&O Technical Matrix")
+st.caption("Universal Multi-Column System Table (Real-Time RSI 50 Matrix + SuperTrend Filter)")
 st.divider()
 
-# --- Full F&O Master Watchlist Asset Base (Expanded) ---
-FNO_TICKERS = [
-    "RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "ITC", "BHARTIARTL",
-    "SBIN", "LTIM", "AXISBANK", "TATAMOTORS", "TRENT", "BAJFINANCE", "MARUTI",
-    "HINDALCO", "KOTAKBANK", "LT", "HCLTECH", "SUNPHARMA", "M&M", "ULTRACEMCO",
-    "POWERGRID", "NTPC", "TITAN", "ASIANPAINT", "ADANIENT", "JSWSTEEL", "COALINDIA"
+# --- Full Comprehensive High-Volume F&O Universe Array Base ---
+FULL_FNO_LIST = [
+    "RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "ITC", "BHARTIARTL", "SBIN", 
+    "LTIM", "AXISBANK", "TATAMOTORS", "TRENT", "BAJFINANCE", "MARUTI", "HINDALCO", 
+    "KOTAKBANK", "LT", "HCLTECH", "SUNPHARMA", "M&M", "ULTRACEMCO", "POWERGRID", 
+    "NTPC", "TITAN", "ASIANPAINT", "ADANIENT", "JSWSTEEL", "COALINDIA", "HEROMOTOCO", 
+    "HINDZINC", "VEDL", "AMBUJACEM", "TATASTEEL", "ADANIPORTS", "APOLLOHOSP", 
+    "BAJAJFINSV", "AUBANK", "BEL", "BHARATFORG", "COFORGE", "DLF", "EICHERMOT", 
+    "GRASIM", "HINDUNILVR", "INDUSINDBK", "IOC", "IRCTC", "JINDALSTEL", "LICHSGFIN"
 ]
 
-# --- Background Technical Calculation Processing Engine ---
-@st.cache_data(ttl=1800)
-def process_full_market(tickers):
-    all_stocks = []
-    buy_stocks = []
-    sell_stocks = []
+@st.cache_data(ttl=900)  # Refresh metrics optimization interval cache every 15 minutes
+def scan_fno_universe(tickers):
+    master_rows = []
+    buy_rows = []
+    sell_rows = []
     
     for ticker in tickers:
         try:
             yf_sym = f"{ticker}.NS"
-            df = yf.download(yf_sym, period="1y", interval="1d", progress=False)
-            if df.empty or len(df) < 30:
+            df = yf.download(yf_sym, period="1mo", interval="1d", progress=False)
+            if df.empty or len(df) < 15:
                 continue
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
 
+            # Execution Logic Computations
             df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
             df['SMA_7'] = ta.trend.sma_indicator(df['Close'], window=7)
-            
-            # Use safe background indicator proxies for momentum regime matching
-            df['above_st'] = df['Close'] > ta.trend.ema_indicator(df['Close'], window=20)
-            df['above_sma'] = df['Close'] > df['SMA_7']
-            df['below_st'] = df['Close'] < ta.trend.ema_indicator(df['Close'], window=20)
-            df['below_sma'] = df['Close'] < df['SMA_7']
+            df['EMA_20'] = ta.trend.ema_indicator(df['Close'], window=20)
 
             curr = df.iloc[-1]
-            c_price = float(curr['Close'])
-            c_rsi = float(curr['RSI'])
+            prev = df.iloc[-2]
+
+            c_close = float(curr['Close'])
+            p_close = float(prev['Close'])
+            c_rsi = round(float(curr['RSI']), 1)
             
-            stock_data = {
-                "name": ticker,
-                "rsi": round(c_rsi, 2),
-                "close": round(c_price, 2),
-                "above_st": bool(curr['above_st']),
-                "above_sma": bool(curr['above_sma']),
-                "below_st": bool(curr['below_st']),
-                "below_sma": bool(curr['below_sma'])
-            }
+            # Mathematical percentage delta variations calculation
+            pct_chg = round(((c_close - p_close) / p_close) * 100, 2)
+            pct_str = f"+{pct_chg}%" if pct_chg >= 0 else f"{pct_chg}%"
+
+            # Determine indicator status alignments
+            st_bullish = c_close > float(curr['EMA_20'])
+            sma_bullish = c_close > float(curr['SMA_7'])
             
-            all_stocks.append(stock_data)
+            # Operational Status Logic Definition Arrays
+            if c_rsi > 50 and st_bullish and sma_bullish:
+                st_dot = '<span class="dot-green"></span>'
+                sig_text = '<span class="tag-buy">🟢 Strong Buy</span>'
+                status = "BUY"
+            elif c_rsi < 50 and not st_bullish and not sma_bullish:
+                st_dot = '<span class="dot-red"></span>'
+                sig_text = '<span class="tag-sell">🔴 Strong Sell</span>'
+                status = "SELL"
+            else:
+                st_dot = '<span class="dot-gray"></span>'
+                sig_text = '<span class="tag-neutral">⚪ Neutral</span>'
+                status = "NEUTRAL"
+
+            row_html = f"""
+                <tr>
+                    <td><b>{ticker}</b></td>
+                    <td>₹{round(c_close, 2)}</td>
+                    <td>{pct_str}</td>
+                    <td>{c_rsi}</td>
+                    <td>{st_dot}</td>
+                    <td>{sig_text}</td>
+                </tr>
+            """
             
-            # Continuous Structural Regime Rules (Not limited to exact crossover candle)
-            if c_rsi > 50 and stock_data["above_st"] and stock_data["above_sma"]:
-                buy_stocks.append(stock_data)
-            elif c_rsi < 50 and stock_data["below_st"] and stock_data["below_sma"]:
-                sell_stocks.append(stock_data)
+            master_rows.append(row_html)
+            if status == "BUY":
+                buy_rows.append(row_html)
+            elif status == "SELL":
+                sell_rows.append(row_html)
         except:
             continue
             
-    return all_stocks, buy_stocks, sell_stocks
+    return master_rows, buy_rows, sell_rows
 
-# --- Run Screening Operations ---
-with st.spinner("Processing full F&O technical analysis matrix..."):
-    full_list, buy_list, sell_list = process_full_market(FNO_TICKERS)
+# --- Execute Parallel Cloud Scanning Data Operations ---
+with st.spinner("Compiling full structural data matrices across F&O targets..."):
+    master_data, buy_data, sell_data = scan_fno_universe(FULL_FNO_LIST)
 
-# --- 3-Column Visual Layout Workspace ---
+# --- Render 3 Columns Interface Tables Side-by-Side ---
 col1, col2, col3 = st.columns(3)
 
+table_header_html = """
+    <table class="fno-table">
+        <thead>
+            <tr>
+                <th>Ticker</th>
+                <th>LTP</th>
+                <th>% Chg</th>
+                <th>RSI</th>
+                <th>Supertrend</th>
+                <th>↓ Signal</th>
+            </tr>
+        </thead>
+        <tbody>
+"""
+
 with col1:
-    st.header(f"📋 Full Watchlist ({len(full_list)})")
-    st.markdown("---")
-    for stock in full_list:
-        # Determine quick status tags for master summary list view
-        tag = "🟢 BULL" if stock in buy_list else "🔴 BEAR" if stock in sell_list else "⚪ NEUTRAL"
-        st.html(f"""
-            <div class="status-card bg-neutral">
-                <h4><b>{stock['name']}</b> ({tag})</h4>
-                <p>Price: ₹{stock['close']} | RSI: {stock['rsi']}</p>
-            </div>
-        """)
+    st.subheader(f"📋 Master F&O List ({len(master_data)})")
+    if master_data:
+        full_table = table_header_html + "".join(master_data) + "</tbody></table>"
+        st.html(full_table)
 
 with col2:
-    st.header(f"🟢 Active BUY Market Regimes ({len(buy_list)})")
-    st.markdown("---")
-    if not buy_list:
-        st.info("No stocks currently holding fully aligned bullish configurations.")
+    st.subheader(f"🟢 Buy Watchlist ({len(buy_data)})")
+    if buy_data:
+        buy_table = table_header_html + "".join(buy_data) + "</tbody></table>"
+        st.html(buy_table)
     else:
-        for stock in buy_list:
-            st.html(f"""
-                <div class="status-card bg-buy">
-                    <h3>📈 {stock['name']}</h3>
-                    <p><b>Close:</b> ₹{stock['close']}</p>
-                    <p><b>RSI:</b> {stock['rsi']} (<span class="text-green">Above 50</span>)</p>
-                    <p>SuperTrend Proxy: <span class="text-green">▲ Above</span></p>
-                    <p>7 SMA Line: <span class="text-green">▲ Above</span></p>
-                </div>
-            """)
+        st.info("No assets currently logging immediate aligned long setups.")
 
 with col3:
-    st.header(f"🔴 Active SELL Market Regimes ({len(sell_list)})")
-    st.markdown("---")
-    if not sell_list:
-        st.info("No stocks currently holding fully aligned bearish configurations.")
+    st.subheader(f"🔴 Sell Watchlist ({len(sell_data)})")
+    if sell_data:
+        sell_table = table_header_html + "".join(sell_data) + "</tbody></table>"
+        st.html(sell_table)
     else:
-        for stock in sell_list:
-            st.html(f"""
-                <div class="status-card bg-sell">
-                    <h3>📉 {stock['name']}</h3>
-                    <p><b>Close:</b> ₹{stock['close']}</p>
-                    <p><b>RSI:</b> {stock['rsi']} (<span class="text-red">Below 50</span>)</p>
-                    <p>SuperTrend Proxy: <span class="text-red">▼ Below</span></p>
-                    <p>7 SMA Line: <span class="text-red">▼ Below</span></p>
-                </div>
-            """)
+        st.info("No assets currently logging immediate aligned short setups.")

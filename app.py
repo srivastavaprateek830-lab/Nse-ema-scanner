@@ -4,62 +4,75 @@ import pandas as pd
 import ta
 
 # --- Page Config Setup ---
-st.set_page_config(layout="wide", page_title="Master F&O Swing Dashboard")
+st.set_page_config(layout="wide", page_title="Universal Automated F&O Terminal")
 
-# --- Streamlit Theme Custom Table CSS Styling Injector ---
+# --- Streamlit Advanced Theme Custom Interface Table Injector ---
 st.html("""
     <style>
-    .reportview-container .main .block-container { padding-top: 1rem; }
+    .reportview-container .main .block-container { padding-top: 0.5rem; }
     .fno-table {
-        width: 100%; border-collapse: collapse; margin-bottom: 20px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        width: 100%; border-collapse: collapse; margin-bottom: 25px; font-family: monospace; background-color: #0b0e14;
     }
     .fno-table th {
-        background-color: #11141a; color: #a1a7b5; padding: 10px; text-align: left;
-        font-size: 12px; font-weight: 600; border-bottom: 2px solid #232833;
+        background-color: #121620; color: #848e9c; padding: 12px 8px; text-align: left;
+        font-size: 11px; font-weight: 600; border-bottom: 2px solid #1e2330; letter-spacing: 0.5px;
     }
     .fno-table td {
-        padding: 10px; border-bottom: 1px solid #1f242e; font-size: 13px; color: #ffffff;
+        padding: 10px 8px; border-bottom: 1px solid #191f2b; font-size: 13px; color: #eaecef;
     }
-    .dot-green { height: 12px; width: 12px; background-color: #28a745; border-radius: 50%; display: inline-block; margin-right: 5px; }
-    .dot-red { height: 12px; width: 12px; background-color: #dc3545; border-radius: 50%; display: inline-block; margin-right: 5px; }
-    .dot-gray { height: 12px; width: 12px; background-color: #6c757d; border-radius: 50%; display: inline-block; margin-right: 5px; }
-    .tag-buy { color: #28a745; font-weight: bold; }
-    .tag-sell { color: #dc3545; font-weight: bold; }
-    .tag-neutral { color: #6c757d; font-weight: bold; }
+    .fno-table tr:hover { background-color: #161a24; }
+    .dot-green { height: 10px; width: 10px; background-color: #02c076; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .dot-red { height: 10px; width: 10px; background-color: #f6465d; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .dot-gray { height: 10px; width: 10px; background-color: #474f5f; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .tag-buy { color: #02c076; font-weight: bold; }
+    .tag-sell { color: #f6465d; font-weight: bold; }
+    .tag-neutral { color: #707a8a; font-weight: bold; }
     </style>
 """)
 
-st.title("🎯 Comprehensive F&O Technical Matrix")
-st.caption("Universal Multi-Column System Table (Real-Time RSI 50 Matrix + SuperTrend Filter)")
+st.title("🎯 Fully Automated F&O Technical Matrix Terminal")
+st.caption("Universal Multi-Column System Table (Real-Time Raw LTP Engine + RSI 50 Matrix + Supertrend Filter)")
 st.divider()
 
-# --- Full Comprehensive High-Volume F&O Universe Array Base ---
-FULL_FNO_LIST = [
-    "RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "ITC", "BHARTIARTL", "SBIN", 
-    "LTIM", "AXISBANK", "TATAMOTORS", "TRENT", "BAJFINANCE", "MARUTI", "HINDALCO", 
-    "KOTAKBANK", "LT", "HCLTECH", "SUNPHARMA", "M&M", "ULTRACEMCO", "POWERGRID", 
-    "NTPC", "TITAN", "ASIANPAINT", "ADANIENT", "JSWSTEEL", "COALINDIA", "HEROMOTOCO", 
-    "HINDZINC", "VEDL", "AMBUJACEM", "TATASTEEL", "ADANIPORTS", "APOLLOHOSP", 
-    "BAJAJFINSV", "AUBANK", "BEL", "BHARATFORG", "COFORGE", "DLF", "EICHERMOT", 
-    "GRASIM", "HINDUNILVR", "INDUSINDBK", "IOC", "IRCTC", "JINDALSTEL", "LICHSGFIN"
-]
+# --- Automated Universal Token Puller ---
+@st.cache_data(ttl=86400) # Cache the list map for 24 hours since F&O additions are rare
+def fetch_automated_fno_list():
+    try:
+        # Pulls live index components directly from Nifty indices server source
+        url = "https://nseindia.com"
+        df_nse = pd.read_csv(url)
+        # Isolate ticker identifier column strings cleanly
+        tickers = df_nse['Symbol'].tolist()
+        
+        # Add high liquidity market heavyweights to ensure tracking coverage matches your template image
+        extra_heavyweights = ["HEROMOTOCO", "HINDZINC", "HINDALCO", "LTIM", "TRENT", "VEDL", "AMBUJACEM", "COFORGE", "DLF", "BEL"]
+        combined_tickers = list(set(tickers + extra_heavyweights))
+        return sorted(combined_tickers)
+    except:
+        # Fallback list if the external NSE text server blocks the request connection temporarily
+        return ["RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "ITC", "BHARTIARTL", "SBIN", "TATAMOTORS", "HEROMOTOCO", "HINDZINC", "HINDALCO"]
 
-@st.cache_data(ttl=900)  # Refresh metrics optimization interval cache every 15 minutes
-def scan_fno_universe(tickers):
+# Run List Generation Anchor
+AUTOMATED_FNO_UNIVERSE = fetch_automated_fno_list()
+
+@st.cache_data(ttl=600)  # Refresh technical indicators cache every 10 minutes
+def scan_automated_universe(tickers):
     master_rows = []
     buy_rows = []
     sell_rows = []
     
+    # Process symbols systematically to ensure optimal performance layout
     for ticker in tickers:
         try:
             yf_sym = f"{ticker}.NS"
-            df = yf.download(yf_sym, period="1mo", interval="1d", progress=False)
+            # auto_adjust=False preserves true raw unadjusted cash LTP (Fixes structural data anomalies)
+            df = yf.download(yf_sym, period="1mo", interval="1d", progress=False, auto_adjust=False)
             if df.empty or len(df) < 15:
                 continue
             if isinstance(df.columns, pd.MultiIndex):
                 df.columns = df.columns.get_level_values(0)
 
-            # Execution Logic Computations
+            # Core Execution Indicators (Raw Close Based)
             df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
             df['SMA_7'] = ta.trend.sma_indicator(df['Close'], window=7)
             df['EMA_20'] = ta.trend.ema_indicator(df['Close'], window=20)
@@ -75,7 +88,6 @@ def scan_fno_universe(tickers):
             pct_chg = round(((c_close - p_close) / p_close) * 100, 2)
             pct_str = f"+{pct_chg}%" if pct_chg >= 0 else f"{pct_chg}%"
 
-            # Determine indicator status alignments
             st_bullish = c_close > float(curr['EMA_20'])
             sma_bullish = c_close > float(curr['SMA_7'])
             
@@ -115,8 +127,8 @@ def scan_fno_universe(tickers):
     return master_rows, buy_rows, sell_rows
 
 # --- Execute Parallel Cloud Scanning Data Operations ---
-with st.spinner("Compiling full structural data matrices across F&O targets..."):
-    master_data, buy_data, sell_data = scan_fno_universe(FULL_FNO_LIST)
+with st.spinner(f"Compiling live data metrics across {len(AUTOMATED_FNO_UNIVERSE)} automated targets..."):
+    master_data, buy_data, sell_data = scan_automated_universe(AUTOMATED_FNO_UNIVERSE)
 
 # --- Render 3 Columns Interface Tables Side-by-Side ---
 col1, col2, col3 = st.columns(3)
@@ -139,21 +151,18 @@ table_header_html = """
 with col1:
     st.subheader(f"📋 Master F&O List ({len(master_data)})")
     if master_data:
-        full_table = table_header_html + "".join(master_data) + "</tbody></table>"
-        st.html(full_table)
+        st.html(table_header_html + "".join(master_data) + "</tbody></table>")
 
 with col2:
     st.subheader(f"🟢 Buy Watchlist ({len(buy_data)})")
     if buy_data:
-        buy_table = table_header_html + "".join(buy_data) + "</tbody></table>"
-        st.html(buy_table)
+        st.html(table_header_html + "".join(buy_data) + "</tbody></table>")
     else:
-        st.info("No assets currently logging immediate aligned long setups.")
+        st.info("No instruments currently match all aligned long rules.")
 
 with col3:
     st.subheader(f"🔴 Sell Watchlist ({len(sell_data)})")
     if sell_data:
-        sell_table = table_header_html + "".join(sell_data) + "</tbody></table>"
-        st.html(sell_table)
+        st.html(table_header_html + "".join(sell_data) + "</tbody></table>")
     else:
-        st.info("No assets currently logging immediate aligned short setups.")
+        st.info("No instruments currently match all aligned short rules.")

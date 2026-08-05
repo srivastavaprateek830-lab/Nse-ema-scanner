@@ -1,10 +1,9 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import pandas_ta_classic as ta  # Changed from pandas_ta to pandas-ta-classic
+import pandas_ta_classic as ta  # Verified library import
 
-
-# --- Page Config & Design Setup ---
+# ... Page Configuration ...
 st.set_page_config(layout="wide", page_title="F&O Swing Dashboard")
 st.markdown("""
     <style>
@@ -19,11 +18,8 @@ st.markdown("""
     .arrow-green { color: #28a745; font-weight: bold; }
     .arrow-red { color: #dc3545; font-weight: bold; }
     </style>
-""", unsafe_allowed_allowed_html=True)
+""", unsafe_allowed_html=True) # Ensure this matches perfectly
 
-st.title("🎯 High-Conviction F&O Daily Swing Dashboard")
-st.caption("Daily Trend Systems Engine (RSI 50 Reversals + SuperTrend + 7 SMA Check)")
-st.divider()
 
 # --- Definitive Core F&O Watchlist List ---
 FNO_TICKERS = [

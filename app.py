@@ -3,8 +3,11 @@ import yfinance as yf
 import pandas as pd
 import ta
 
+# --- Page Config Setup ---
 st.set_page_config(layout="wide", page_title="F&O Swing Dashboard")
-st.markdown("""
+
+# --- Use st.html to apply the custom CSS styles directly without markdown errors ---
+st.html("""
     <style>
     .metric-box-buy {
         background-color: #0e2f1d; padding: 15px; border-radius: 8px;
@@ -17,23 +20,26 @@ st.markdown("""
     .arrow-green { color: #28a745; font-weight: bold; }
     .arrow-red { color: #dc3545; font-weight: bold; }
     </style>
-""", unsafe_allowed_html=True)
+""")
 
 st.title("🎯 High-Conviction F&O Daily Swing Dashboard")
 st.caption("Daily Trend Systems Engine (RSI 50 Reversals + SuperTrend + 7 SMA Check)")
 st.divider()
 
+# --- Core Liquid F&O Watchlist ---
 FNO_TICKERS = [
     "RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "ITC", "BHARTIARTL",
     "SBIN", "LTIM", "AXISBANK", "TATAMOTORS", "TRENT", "BAJFINANCE", "MARUTI",
     "HINDALCO", "KOTAKBANK", "LT", "HCLTECH", "SUNPHARMA", "M&M"
 ]
 
+# --- Sidebar Layout: Watchlist View Panel ---
 with st.sidebar:
     st.header("📋 F&O Master Watchlist")
     st.write(f"Total Liquid Counters Monitored: **{len(FNO_TICKERS)}**")
     selected_stock = st.selectbox("Quick-Inspect Underlying Data:", FNO_TICKERS)
 
+# --- Background Technical Calculation Processing Engine ---
 @st.cache_data(ttl=1800)
 def compute_market_signals(tickers):
     buy_signals = []
@@ -77,25 +83,28 @@ def compute_market_signals(tickers):
             continue
     return buy_signals, sell_signals
 
+# --- Run Screening Operations ---
 with st.spinner("Processing real-time equity technical data models..."):
     buys, sells = compute_market_signals(FNO_TICKERS)
 
+# --- Dashboard Layout Panels ---
 col_buy, col_sell = st.columns(2)
+
 with col_buy:
     st.subheader("🟢 High-Conviction BUY Triggers")
     if not buys:
         st.info("No F&O counters currently crossing above structural RSI 50 criteria today.")
     else:
         for stock in buys:
-            st.markdown(f"""
+            st.html(f"""
                 <div class="metric-box-buy">
                     <h3>📈 {stock['name']}</h3>
                     <p><b>Current Price:</b> ₹{stock['close']}</p>
-                    <p><b>Daily RSI:</b> <b>{stock['rsi']}</b> (Crossed > 50)</p>
+                    <p><b>Daily RSI:</b> <b>{stock['rsi']}</b> (Crossed &gt; 50)</p>
                     <p>Price vs SuperTrend: <span class="arrow-green">▲ Above</span></p>
                     <p>Price vs 7-Period SMA: <span class="arrow-green">▲ Above</span></p>
                 </div>
-            """, unsafe_allowed_html=True)
+            """)
 
 with col_sell:
     st.subheader("🔴 High-Conviction SELL Triggers")
@@ -103,12 +112,12 @@ with col_sell:
         st.info("No F&O counters currently breaking down beneath macro boundaries today.")
     else:
         for stock in sells:
-            st.markdown(f"""
+            st.html(f"""
                 <div class="metric-box-sell">
                     <h3>📉 {stock['name']}</h3>
                     <p><b>Current Price:</b> ₹{stock['close']}</p>
-                    <p><b>Daily RSI:</b> <b>{stock['rsi']}</b> (Crossed < 50)</p>
+                    <p><b>Daily RSI:</b> <b>{stock['rsi']}</b> (Crossed &lt; 50)</p>
                     <p>Price vs SuperTrend: <span class="arrow-red">▼ Below</span></p>
                     <p>Price vs 7-Period SMA: <span class="arrow-red">▼ Below</span></p>
                 </div>
-            """, unsafe_allowed_html=True)
+            """)

@@ -1,7 +1,8 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-import pandas_ta as ta
+import pandas_ta_classic as ta  # Changed from pandas_ta to pandas-ta-classic
+
 
 # --- Page Config & Design Setup ---
 st.set_page_config(layout="wide", page_title="F&O Swing Dashboard")

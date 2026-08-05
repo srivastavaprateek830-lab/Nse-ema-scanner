@@ -6,44 +6,38 @@ import ta
 # --- Page Config Setup ---
 st.set_page_config(layout="wide", page_title="F&O Swing Dashboard")
 
-# --- Use st.html to apply the custom CSS styles directly without markdown errors ---
+# --- Optimized CSS Styles for 3 Columns ---
 st.html("""
     <style>
-    .metric-box-buy {
-        background-color: #0e2f1d; padding: 15px; border-radius: 8px;
-        border-left: 6px solid #198754; margin-bottom: 12px; color: #e0f2e9;
+    .status-card {
+        padding: 12px; border-radius: 6px; margin-bottom: 10px; color: #ffffff; font-family: monospace;
     }
-    .metric-box-sell {
-        background-color: #3b141a; padding: 15px; border-radius: 8px;
-        border-left: 6px solid #dc3545; margin-bottom: 12px; color: #fde8eb;
-    }
-    .arrow-green { color: #28a745; font-weight: bold; }
-    .arrow-red { color: #dc3545; font-weight: bold; }
+    .bg-neutral { background-color: #1e1e24; border-left: 4px solid #6c757d; }
+    .bg-buy { background-color: #0e2f1d; border-left: 4px solid #198754; }
+    .bg-sell { background-color: #3b141a; border-left: 4px solid #dc3545; }
+    .text-green { color: #28a745; font-weight: bold; }
+    .text-red { color: #dc3545; font-weight: bold; }
     </style>
 """)
 
-st.title("🎯 High-Conviction F&O Daily Swing Dashboard")
-st.caption("Daily Trend Systems Engine (RSI 50 Reversals + SuperTrend + 7 SMA Check)")
+st.title("🎯 High-Conviction F&O Multi-Column Dashboard")
+st.caption("Complete Market Regime Matrix (RSI 50 Filter + Trend Line Proxy + 7 SMA)")
 st.divider()
 
-# --- Core Liquid F&O Watchlist ---
+# --- Full F&O Master Watchlist Asset Base (Expanded) ---
 FNO_TICKERS = [
     "RELIANCE", "HDFCBANK", "ICICIBANK", "INFY", "TCS", "ITC", "BHARTIARTL",
     "SBIN", "LTIM", "AXISBANK", "TATAMOTORS", "TRENT", "BAJFINANCE", "MARUTI",
-    "HINDALCO", "KOTAKBANK", "LT", "HCLTECH", "SUNPHARMA", "M&M"
+    "HINDALCO", "KOTAKBANK", "LT", "HCLTECH", "SUNPHARMA", "M&M", "ULTRACEMCO",
+    "POWERGRID", "NTPC", "TITAN", "ASIANPAINT", "ADANIENT", "JSWSTEEL", "COALINDIA"
 ]
-
-# --- Sidebar Layout: Watchlist View Panel ---
-with st.sidebar:
-    st.header("📋 F&O Master Watchlist")
-    st.write(f"Total Liquid Counters Monitored: **{len(FNO_TICKERS)}**")
-    selected_stock = st.selectbox("Quick-Inspect Underlying Data:", FNO_TICKERS)
 
 # --- Background Technical Calculation Processing Engine ---
 @st.cache_data(ttl=1800)
-def compute_market_signals(tickers):
-    buy_signals = []
-    sell_signals = []
+def process_full_market(tickers):
+    all_stocks = []
+    buy_stocks = []
+    sell_stocks = []
     
     for ticker in tickers:
         try:
@@ -57,67 +51,88 @@ def compute_market_signals(tickers):
             df['RSI'] = ta.momentum.rsi(df['Close'], window=14)
             df['SMA_7'] = ta.trend.sma_indicator(df['Close'], window=7)
             
+            # Use safe background indicator proxies for momentum regime matching
             df['above_st'] = df['Close'] > ta.trend.ema_indicator(df['Close'], window=20)
             df['above_sma'] = df['Close'] > df['SMA_7']
             df['below_st'] = df['Close'] < ta.trend.ema_indicator(df['Close'], window=20)
             df['below_sma'] = df['Close'] < df['SMA_7']
 
             curr = df.iloc[-1]
-            prev = df.iloc[-2]
+            c_price = float(curr['Close'])
+            c_rsi = float(curr['RSI'])
             
             stock_data = {
                 "name": ticker,
-                "rsi": round(float(curr['RSI']), 2),
-                "close": round(float(curr['Close']), 2),
+                "rsi": round(c_rsi, 2),
+                "close": round(c_price, 2),
                 "above_st": bool(curr['above_st']),
                 "above_sma": bool(curr['above_sma']),
                 "below_st": bool(curr['below_st']),
                 "below_sma": bool(curr['below_sma'])
             }
             
-            if float(prev['RSI']) <= 50 and float(curr['RSI']) > 50 and stock_data["above_st"] and stock_data["above_sma"]:
-                buy_signals.append(stock_data)
-            elif float(prev['RSI']) >= 50 and float(curr['RSI']) < 50 and stock_data["below_st"] and stock_data["below_sma"]:
-                sell_signals.append(stock_data)
+            all_stocks.append(stock_data)
+            
+            # Continuous Structural Regime Rules (Not limited to exact crossover candle)
+            if c_rsi > 50 and stock_data["above_st"] and stock_data["above_sma"]:
+                buy_stocks.append(stock_data)
+            elif c_rsi < 50 and stock_data["below_st"] and stock_data["below_sma"]:
+                sell_stocks.append(stock_data)
         except:
             continue
-    return buy_signals, sell_signals
+            
+    return all_stocks, buy_stocks, sell_stocks
 
 # --- Run Screening Operations ---
-with st.spinner("Processing real-time equity technical data models..."):
-    buys, sells = compute_market_signals(FNO_TICKERS)
+with st.spinner("Processing full F&O technical analysis matrix..."):
+    full_list, buy_list, sell_list = process_full_market(FNO_TICKERS)
 
-# --- Dashboard Layout Panels ---
-col_buy, col_sell = st.columns(2)
+# --- 3-Column Visual Layout Workspace ---
+col1, col2, col3 = st.columns(3)
 
-with col_buy:
-    st.subheader("🟢 High-Conviction BUY Triggers")
-    if not buys:
-        st.info("No F&O counters currently crossing above structural RSI 50 criteria today.")
+with col1:
+    st.header(f"📋 Full Watchlist ({len(full_list)})")
+    st.markdown("---")
+    for stock in full_list:
+        # Determine quick status tags for master summary list view
+        tag = "🟢 BULL" if stock in buy_list else "🔴 BEAR" if stock in sell_list else "⚪ NEUTRAL"
+        st.html(f"""
+            <div class="status-card bg-neutral">
+                <h4><b>{stock['name']}</b> ({tag})</h4>
+                <p>Price: ₹{stock['close']} | RSI: {stock['rsi']}</p>
+            </div>
+        """)
+
+with col2:
+    st.header(f"🟢 Active BUY Market Regimes ({len(buy_list)})")
+    st.markdown("---")
+    if not buy_list:
+        st.info("No stocks currently holding fully aligned bullish configurations.")
     else:
-        for stock in buys:
+        for stock in buy_list:
             st.html(f"""
-                <div class="metric-box-buy">
+                <div class="status-card bg-buy">
                     <h3>📈 {stock['name']}</h3>
-                    <p><b>Current Price:</b> ₹{stock['close']}</p>
-                    <p><b>Daily RSI:</b> <b>{stock['rsi']}</b> (Crossed &gt; 50)</p>
-                    <p>Price vs SuperTrend: <span class="arrow-green">▲ Above</span></p>
-                    <p>Price vs 7-Period SMA: <span class="arrow-green">▲ Above</span></p>
+                    <p><b>Close:</b> ₹{stock['close']}</p>
+                    <p><b>RSI:</b> {stock['rsi']} (<span class="text-green">Above 50</span>)</p>
+                    <p>SuperTrend Proxy: <span class="text-green">▲ Above</span></p>
+                    <p>7 SMA Line: <span class="text-green">▲ Above</span></p>
                 </div>
             """)
 
-with col_sell:
-    st.subheader("🔴 High-Conviction SELL Triggers")
-    if not sells:
-        st.info("No F&O counters currently breaking down beneath macro boundaries today.")
+with col3:
+    st.header(f"🔴 Active SELL Market Regimes ({len(sell_list)})")
+    st.markdown("---")
+    if not sell_list:
+        st.info("No stocks currently holding fully aligned bearish configurations.")
     else:
-        for stock in sells:
+        for stock in sell_list:
             st.html(f"""
-                <div class="metric-box-sell">
+                <div class="status-card bg-sell">
                     <h3>📉 {stock['name']}</h3>
-                    <p><b>Current Price:</b> ₹{stock['close']}</p>
-                    <p><b>Daily RSI:</b> <b>{stock['rsi']}</b> (Crossed &lt; 50)</p>
-                    <p>Price vs SuperTrend: <span class="arrow-red">▼ Below</span></p>
-                    <p>Price vs 7-Period SMA: <span class="arrow-red">▼ Below</span></p>
+                    <p><b>Close:</b> ₹{stock['close']}</p>
+                    <p><b>RSI:</b> {stock['rsi']} (<span class="text-red">Below 50</span>)</p>
+                    <p>SuperTrend Proxy: <span class="text-red">▼ Below</span></p>
+                    <p>7 SMA Line: <span class="text-red">▼ Below</span></p>
                 </div>
             """)
